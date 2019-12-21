@@ -1,0 +1,13 @@
+name = "TTCrystal"
+uuid = "e9286aa6-152c-11ea-25e0-a35959c8a8d3"
+authors = ["Grigory Starkov <mozgolom92@gmail.com>"]
+version = "0.1.0"
+
+[deps]
+Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
+HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+OffsetArrays = "6fe1bfb0-de20-5000-8ca7-80f57d26f881"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+SharedArrays = "1a1011a3-84de-559e-8e89-a11a2f7dc383"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
