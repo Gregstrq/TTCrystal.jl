@@ -47,7 +47,7 @@ function solve_sce_nob1(params::ParamsNoB1, rdisp::ReducedDispersion, Nₚ, rang
 end
 
 function seed_sn(params::ParamsNoB1, rdisp::ReducedDispersion, Nₚ, range = (0.5, 0.99999))
-    β, m, N = params.β, params.m, params, N
+    β, m, N = params.β, params.m, params.N
     k, γ = solve_sce_nob1(params, rdisp, Nₚ, range)
     dτ = β/(N*m) 
     τs = [dτ*(i-0.5) for i = 1:N]
