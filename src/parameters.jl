@@ -75,28 +75,3 @@ end
 function generate_psamples(rdisp::ReducedDispersion, Nₚ)
 	return separate_psamples(get_psamples(rdisp, Nₚ))
 end
-
-function get_U0(γ, β, rdisp, Nₚ)
-    psamples_raw = get_psamples(rdisp, Nₚ)
-    s = 0.0
-    for psample in psamples_raw
-        εₚ⁺, εₚ⁻, wₚ = psample
-        κₚ = sqrt(εₚ⁻^2 + γ^2)
-        s += wₚ*(tanh(β*0.5*(εₚ⁺+κₚ)) + tanh(β*0.5*(κₚ-εₚ⁺)))/κₚ
-    end
-    return 4.0/s
-end
-
-function check_gamma(γ, params::ParamsNoB1, rdisp, Nₚ)
-    psamples_raw = get_psamples(rdisp, Nₚ)
-    β = params.β
-    U0 = 1/params.u
-    s = 0.0
-    for psample in psamples_raw
-        εₚ⁺, εₚ⁻, wₚ = psample
-        κₚ = sqrt(εₚ⁻^2 + γ^2)
-        s += wₚ*(tanh(β*0.5*(εₚ⁺+κₚ)) + tanh(β*0.5*(κₚ-εₚ⁺)))/κₚ
-    end
-    return U0*0.25*s-1.0
-end
-

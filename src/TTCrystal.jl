@@ -1,8 +1,9 @@
 module TTCrystal
 
-using Distributed, LinearAlgebra, SharedArrays, HDF5, StaticArrays, Printf, OffsetArrays
+using Distributed, LinearAlgebra, SharedArrays, HDF5, StaticArrays, Printf, OffsetArrays, Elliptic, Roots
 
 include("parameters.jl")
+include("supplementary_functions.jl")
 include("initial_conditions.jl")
 include("matrices.jl")
 include("structure_generation.jl")
