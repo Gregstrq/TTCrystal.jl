@@ -52,10 +52,10 @@ end
 
 wfunc(y::Float64) = y==0.0 ? 0.0 : y^2*log((1+sqrt(1-y^6))/abs(y)^3)
 
-(rdisp::ReducedDispersion)(y::Float64) = (-rdisp.μ, rdisp.P + rdisp.α*rdisp.Λ*y^3, wfunc(y)*6rdisp.Λ/(2π)^2)::NTuple{3,Float64}
+(rdisp::ReducedDispersion)(y::Float64, dy::Float64) = (-rdisp.μ, rdisp.P + rdisp.α*rdisp.Λ*y^3, wfunc(y)*6dy*rdisp.Λ/(2π)^2)::NTuple{3,Float64}
 
 function get_psamples(rdisp::ReducedDispersion, Nₚ)
-	psamples_raw = rdisp.(range(-1.0,1.0; length = Nₚ))
+    psamples_raw = rdisp.(range(-1.0,1.0; length = Nₚ), 2.0/(Nₚ-1))
 	psamples_raw[1] = (psamples_raw[1][1], psamples_raw[1][2], 0.5*psamples_raw[1][3])
 	psamples_raw[end] = (psamples_raw[end][1], psamples_raw[end][2], 0.5*psamples_raw[end][3])
 	return psamples_raw
@@ -75,3 +75,28 @@ end
 function generate_psamples(rdisp::ReducedDispersion, Nₚ)
 	return separate_psamples(get_psamples(rdisp, Nₚ))
 end
+
+function get_U0(γ, β, rdisp, Nₚ)
+    psamples_raw = get_psamples(rdisp, Nₚ)
+    s = 0.0
+    for psample in psamples_raw
+        εₚ⁺, εₚ⁻, wₚ = psample
+        κₚ = sqrt(εₚ⁻^2 + γ^2)
+        s += wₚ*(tanh(β*0.5*(εₚ⁺+κₚ)) + tanh(β*0.5*(κₚ-εₚ⁺)))/κₚ
+    end
+    return 4.0/s
+end
+
+function check_gamma(γ, params::ParamsNoB1, rdisp, Nₚ)
+    psamples_raw = get_psamples(rdisp, Nₚ)
+    β = params.β
+    U0 = 1/params.u
+    s = 0.0
+    for psample in psamples_raw
+        εₚ⁺, εₚ⁻, wₚ = psample
+        κₚ = sqrt(εₚ⁻^2 + γ^2)
+        s += wₚ*(tanh(β*0.5*(εₚ⁺+κₚ)) + tanh(β*0.5*(κₚ-εₚ⁺)))/κₚ
+    end
+    return U0*0.25*s-1.0
+end
+
