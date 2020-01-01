@@ -38,7 +38,7 @@ function precompute_newton_step!(∂Fs, ∂²Fs, bs, params::AbstractParams, psa
 	return finalize!(∂Fs[1], ∂²Fs[1], ΔF, bs, params)
 end
 
-function finalize!(∂F, ∂²F, ΔF, bs, params::ParamsB1)
+function finalize!(∂F, ∂²F, ΔF, bs, params::AbstractParamsB1)
 	N, m, β, u, u₁ = params.N, params.m, params.β, params.u, params.u₁
 	mΔτ = β/N
 	ΔF = mΔτ*(u*sum(abs2, bs[1:N]) + u₁*sum(abs2, bs[(N+1):2N])) - ΔF
@@ -55,7 +55,7 @@ function finalize!(∂F, ∂²F, ΔF, bs, params::ParamsB1)
 	return ΔF, ∂F, ∂²F
 end
 
-function finalize!(∂F, ∂²F, ΔF, bs, params::ParamsNoB1)
+function finalize!(∂F, ∂²F, ΔF, bs, params::AbstractParamsNoB1)
 	N, m, β, u = params.N, params.m, params.β, params.u
 	mΔτ = β/N
 	ΔF = mΔτ*u*sum(abs2, bs) - ΔF
@@ -74,4 +74,24 @@ function newton_step!(bs, ∂Fs, ∂²Fs, params::AbstractParams, psamples)
 	return precompute_newton_step!(∂Fs, ∂²Fs, bs, params, psamples)..., norm(dbs)
 end
 
+function newton_step!(bs, ∂Fs, ∂²Fs, params::ParamsNoB1_pinned, psamples)
+	is = [i for i=1:params.N if (i!=params.i_pinned)]
+	∂Fv = @view ∂Fs[1][is]
+	∂²Fv = @view ∂²Fs[1][is,is]
+	dbs = fill!(similar(bs), 0.0)
+	dbsv = @view dbs[is]
+	dbsv .= -∂²Fv\∂Fv
+	bs .+= dbs
+	return precompute_newton_step!(∂Fs, ∂²Fs, bs, params, psamples)..., norm(dbs)
+end
 
+function newton_step!(bs, ∂Fs, ∂²Fs, params::ParamsB1_pinned, psamples)
+	is = [i for i=1:2params.N if (i!=params.i_pinned)]
+	∂Fv = @view ∂Fs[1][is]
+	∂²Fv = @view ∂²Fs[1][is,is]
+	dbs = fill!(similar(bs), 0.0)
+	dbsv = @view dbs[is]
+	dbsv .= -∂²Fv\∂Fv
+	bs .+= dbs
+	return precompute_newton_step!(∂Fs, ∂²Fs, bs, params, psamples)..., norm(dbs)
+end

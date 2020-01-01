@@ -153,8 +153,8 @@ function compute_single_period!(∂U, ∂²U, U_cash, b_vec::AbstractVector, ε�
 	return U_cash[1]
 end
 
-process_bs(bs, params::ParamsNoB1) = (bs,)
-process_bs(bs, params::ParamsB1) = (bs[1:params.N], bs[(params.N+1):2params.N])
+process_bs(bs, params::AbstractParamsNoB1) = (bs,)
+process_bs(bs, params::AbstractParamsB1) = (bs[1:params.N], bs[(params.N+1):2params.N])
 
 function custom_eigen(U::SMatrix{2,2, Complex{Float64}})
 	eigvals, eigvecs = eigen(Matrix(U))

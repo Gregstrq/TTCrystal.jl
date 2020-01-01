@@ -5,11 +5,26 @@ function save_params!(g, params::ParamsB1)
 	g["u"] = params.u
 	g["u₁"] = params.u₁
 end
+function save_params!(g, params::ParamsB1_pinned)
+	g["N"] = params.N
+	g["m"] = params.m
+	g["β"] = params.β
+	g["u"] = params.u
+	g["u₁"] = params.u₁
+	g["i_pinned"] = params.i_pinned
+end
 function save_params!(g, params::ParamsNoB1)
 	g["N"] = params.N
 	g["m"] = params.m
 	g["β"] = params.β
 	g["u"] = params.u
+end
+function save_params!(g, params::ParamsNoB1_pinned)
+	g["N"] = params.N
+	g["m"] = params.m
+	g["β"] = params.β
+	g["u"] = params.u
+	g["i_pinned"] = params.i_pinned
 end
 
 function save_dispersion!(g, rdisp::ReducedDispersion)
@@ -19,8 +34,8 @@ function save_dispersion!(g, rdisp::ReducedDispersion)
 	g["Λ"] = rdisp.Λ
 end
 
-isB1(params::ParamsB1) = true
-isB1(params::ParamsNoB1) = false
+isB1(params::AbstractParamsB1) = true
+isB1(params::AbstractParamsNoB1) = false
 
 struct Saver
 	save_file::String
@@ -52,7 +67,7 @@ function save_data(saver_o::Saver, bs, ΔF, ∂F, ∂²F, ϵ, params, rdisp, N�
 end
 function log_data(saver_o::Saver, i, t, ϵ)
 	io = open(saver_o.log_file, "a")
-	print(io, @sprintf("%6d %12.3E %12.2E", i, t, ϵ))
+	print(io, @sprintf("%6d %12.3E %12.2E\n", i, t, ϵ))
 	close(io)
 end
 function output(saver_o, bs, ΔF, ∂F, ∂²F, ϵ, t, i, params, rdisp, Nₚ)

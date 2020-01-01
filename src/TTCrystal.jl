@@ -10,7 +10,7 @@ include("structure_generation.jl")
 include("newton_iteration.jl")
 include("interface.jl")
 
-export ParamsB1, ParamsNoB1, ReducedDispersion, Saver
+export ParamsB1, ParamsB1_pinned, ParamsNoB1, ParamsNoB1_pinned, ReducedDispersion, Saver
 export generate_shared_cash, generate_psamples
 export isB1, output, save_data, log_data, seek_minimum, newton_step!, precompute_newton_step!, finalize!
 export B, B′₀, B′₁, B′′₀₀, B′′₁₁, B′′₀₁

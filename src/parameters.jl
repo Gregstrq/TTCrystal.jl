@@ -1,15 +1,27 @@
 abstract type AbstractParams end
+abstract type AbstractParamsB1 <: AbstractParams end
+abstract type AbstractParamsNoB1 <: AbstractParams end
 
-struct ParamsB1 <: AbstractParams
+struct ParamsB1 <: AbstractParamsB1
     N::Int64
     m::Int64
     β::Float64
     u::Float64
-    u1::Float64
+    u₁::Float64
     ParamsB1(N::Int64, m::Int64, β::Float64, U0::Float64, Ut0::Float64) = new(N, m, β, 1/U0, 1/Ut0)
 end
 
-struct ParamsNoB1 <: AbstractParams
+struct ParamsB1_pinned <: AbstractParamsB1
+    N::Int64
+    m::Int64
+    β::Float64
+    u::Float64
+    u₁::Float64
+	i_pinned::Int64
+	ParamsB1_pinned(N::Int64, m::Int64, β::Float64, U0::Float64, Ut0::Float64) = new(N, m, β, 1/U0, 1/Ut0, div(N,2)+1)
+end
+
+struct ParamsNoB1 <: AbstractParamsNoB1
     N::Int64
     m::Int64
     β::Float64
@@ -17,8 +29,17 @@ struct ParamsNoB1 <: AbstractParams
     ParamsNoB1(N::Int64, m::Int64, β::Float64, U0::Float64) = new(N, m, β, 1/U0)
 end
 
+struct ParamsNoB1_pinned <: AbstractParamsNoB1
+    N::Int64
+    m::Int64
+    β::Float64
+    u::Float64
+	i_pinned::Int64
+    ParamsNoB1_pinned(N::Int64, m::Int64, β::Float64, U0::Float64) = new(N, m, β, 1/U0, div(N,2)+1)
+end
 
-function generate_shared_cash(params::ParamsB1)
+
+function generate_shared_cash(params::AbstractParamsB1)
 	np = nprocs()
 	N = params.N
 	∂Fs = Vector{SharedVector{Float64}}()
@@ -30,7 +51,7 @@ function generate_shared_cash(params::ParamsB1)
 	return ∂Fs, ∂²Fs
 end
 
-function generate_shared_cash(params::ParamsNoB1)
+function generate_shared_cash(params::AbstractParamsNoB1)
 	np = nprocs()
 	N = params.N
 	∂Fs = Vector{SharedVector{Float64}}()
