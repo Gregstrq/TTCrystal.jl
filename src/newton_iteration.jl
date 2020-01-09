@@ -16,6 +16,13 @@ function process_chunk!(∂F::SharedArray{Float64}, ∂²F::SharedArray{Float64}
 	return ΔF
 end
 
+function process_ΔF_chunk!(ΔFs_chunk, bs, params::AbstractParams, psamples::AbstractVector{NTuple{3, Float64}})
+	for i in eachindex(psmaples)
+		(εₚ⁺, εₚ⁻, wₚ) = psamples[i]
+		ΔFs_chunk[i] = wₚ*compute_ΔFₚ!(bs, params, εₚ⁺, εₚ⁻)
+	end
+end
+
 true_workers() = nworkers()>1 ? workers() : Int64[]
 
 
@@ -74,8 +81,17 @@ function newton_step!(bs, ∂Fs, ∂²Fs, params::AbstractParams, psamples)
 	return precompute_newton_step!(∂Fs, ∂²Fs, bs, params, psamples)..., norm(dbs)
 end
 
-function newton_step!(bs, ∂Fs, ∂²Fs, params::ParamsNoB1_pinned, psamples)
-	is = [i for i=1:params.N if (i!=params.i_pinned)]
+get_is(params::ParamsNoB1_pinned) = [i for i=1:get_length(params) if (i!=1)&&(i!=params.i_pinned)]
+
+function get_is(params::ParamsB1_pinned)
+	N = params.N
+	i_pinned = params.i_pinned
+	blacklist = [1, i_pinned, N+div(N,4)+1, N+div(N,4)+i_pinned]
+	return [i for i=1:get_length(params) if !(i in blacklist)]
+end
+
+function newton_step!(bs, ∂Fs, ∂²Fs, params::T, psamples) where {T<:Union{ParamsB1_pinned, ParamsNoB1_pinned}}
+	is = get_is(params) 
 	∂Fv = @view ∂Fs[1][is]
 	∂²Fv = @view ∂²Fs[1][is,is]
 	dbs = fill!(similar(bs), 0.0)
@@ -85,13 +101,3 @@ function newton_step!(bs, ∂Fs, ∂²Fs, params::ParamsNoB1_pinned, psamples)
 	return precompute_newton_step!(∂Fs, ∂²Fs, bs, params, psamples)..., norm(dbs)
 end
 
-function newton_step!(bs, ∂Fs, ∂²Fs, params::ParamsB1_pinned, psamples)
-	is = [i for i=1:2params.N if (i!=params.i_pinned)]
-	∂Fv = @view ∂Fs[1][is]
-	∂²Fv = @view ∂²Fs[1][is,is]
-	dbs = fill!(similar(bs), 0.0)
-	dbsv = @view dbs[is]
-	dbsv .= -∂²Fv\∂Fv
-	bs .+= dbs
-	return precompute_newton_step!(∂Fs, ∂²Fs, bs, params, psamples)..., norm(dbs)
-end

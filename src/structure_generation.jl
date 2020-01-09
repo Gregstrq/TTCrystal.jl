@@ -1,4 +1,4 @@
-function compute_ordered_exp(b_vec, b₁_vec, i, j, εₚ⁻, Δτ)
+function compute_ordered_exp(b_vec::AbstractVector{Float64}, b₁_vec::AbstractVector{Float64}, i::Int64, j::Int64, εₚ⁻::Float64, Δτ::Float64)
 	M = SA[1.0+0.0im 0.0; 0.0 1.0+0.0im]
 	for i′ = i:j
 		M = B(b_vec, b₁_vec, i′, εₚ⁻, Δτ)*M
@@ -6,10 +6,18 @@ function compute_ordered_exp(b_vec, b₁_vec, i, j, εₚ⁻, Δτ)
 	return M
 end
 
-function compute_ordered_exp(b_vec, i, j, εₚ⁻, Δτ)
+function compute_ordered_exp(b_vec::AbstractVector{Float64}, i::Int64, j::Int64, εₚ⁻::Float64, Δτ::Float64)
 	M = SA[1.0+0.0im 0.0; 0.0 1.0+0.0im]
 	for i′ = i:j
 		M = B(b_vec, i′, εₚ⁻, Δτ)*M
+	end
+	return M
+end
+
+function compute_ordered_exp(bs, N::Int64, εₚ⁻::Float64, Δτ::Float64)
+	M = SA[1.0+0.0im 0.0; 0.0 1.0+0.0im]
+	for i = N:-1:1
+		M = M*B(bs, i, εₚ⁻, Δτ)
 	end
 	return M
 end
@@ -219,5 +227,11 @@ function compute_full_span!(∂Fₚ, ∂²Fₚ, ∂U, ∂²U, U_cash, bs::Vector
 			∂²Fₚ[i,j] = mFₚ⁻¹*Δf-∂Fₚ[i]*∂Fₚ[j]
 		end
 	end
+	return log((cosh(β*εₚ⁺) + 0.5*(λ₁^m + λ₂^m))/(cosh(β*εₚ⁺)+cosh(β*εₚ⁻)))
+end
+
+function compute_ΔFₚ!(bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻)
+	U = compute_ordered_exp(process_bs(bs, params), εₚ⁻, Δτ)
+	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
 	return log((cosh(β*εₚ⁺) + 0.5*(λ₁^m + λ₂^m))/(cosh(β*εₚ⁺)+cosh(β*εₚ⁻)))
 end

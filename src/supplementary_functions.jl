@@ -50,7 +50,7 @@ function seed_sn(params::ParamsNoB1, rdisp::ReducedDispersion, Nₚ, range = (0.
     β, m, N = params.β, params.m, params.N
     k, γ = solve_sce_nob1(params, rdisp, Nₚ, range)
     dτ = β/(N*m) 
-    τs = [dτ*(i-0.5) for i = 1:N]
+    τs = [dτ*(i-1) for i = 1:N]
     return k*γ*Jacobi.sn.(γ*τs, k^2)
 end
 
@@ -58,8 +58,9 @@ function seed_sn(params::ParamsNoB1_pinned, rdisp::ReducedDispersion, Nₚ, rang
     β, m, N = params.β, params.m, params.N
     k, γ = solve_sce_nob1(params, rdisp, Nₚ, range)
     dτ = β/(N*m) 
-    τs = [dτ*(i-0.5) for i = 1:N]
+    τs = [dτ*(i-1) for i = 1:N]
     sns = k*γ*Jacobi.sn.(γ*τs, k^2)
+	sns[1] = 0.0
 	sns[params.i_pinned] = 0.0
 	return sns
 end
@@ -68,10 +69,11 @@ function seed_sn(params::ParamsB1_pinned, rdisp::ReducedDispersion, Nₚ, range 
     β, m, N = params.β, params.m, params.N
     k, γ = solve_sce_nob1(params, rdisp, Nₚ, range)
     dτ = β/(N*m) 
-    τs = [dτ*(i-0.5) for i = 1:N]
+    τs = [dτ*(i-1) for i = 1:N]
 	sns = Vector{Float64}(undef, 2N)
 	sns[1:N] = k*γ*Jacobi.sn.(γ*τs, k^2)
 	sns[(N+1):2N] .= 0.0
+	sns[1] = 0.0
 	sns[params.i_pinned] = 0.0
 	return sns
 end
@@ -80,7 +82,7 @@ function show_sn(params::ParamsNoB1, rdisp::ReducedDispersion, Nₚ, range = (0.
     β, m, N = params.β, params.m, params.N
     k, γ = solve_sce_nob1(params, rdisp, Nₚ, range)
     dτ = β/(N*m) 
-    τs = [dτ*(i-0.5) for i = 1:N]
+    τs = [dτ*(i-1) for i = 1:N]
     return τs, k*γ*Jacobi.sn.(γ*τs, k^2)
 end
 
@@ -88,8 +90,9 @@ function show_sn(params::ParamsNoB1_pinned, rdisp::ReducedDispersion, Nₚ, rang
     β, m, N = params.β, params.m, params.N
     k, γ = solve_sce_nob1(params, rdisp, Nₚ, range)
     dτ = β/(N*m) 
-    τs = [dτ*(i-0.5) for i = 1:N]
+    τs = [dτ*(i-1) for i = 1:N]
 	sns = k*γ*Jacobi.sn.(γ*τs, k^2)
+	sns[1] = 0.0
 	sns[params.i_pinned] = 0.0
     return τs, sns
 end

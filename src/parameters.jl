@@ -38,27 +38,17 @@ struct ParamsNoB1_pinned <: AbstractParamsNoB1
     ParamsNoB1_pinned(N::Int64, m::Int64, β::Float64, U0::Float64) = new(N, m, β, 1/U0, div(N,2)+1)
 end
 
+get_length(params::AbstractParamsB1) = 2params.N
+get_length(params::AbstractParamsNoB1) = params.N
 
-function generate_shared_cash(params::AbstractParamsB1)
+function generate_shared_cash(params::AbstractParams)
 	np = nprocs()
-	N = params.N
+	N′ = get_length(params)
 	∂Fs = Vector{SharedVector{Float64}}()
 	∂²Fs = Vector{SharedMatrix{Float64}}()
 	for i in Base.OneTo(np)
-		push!(∂Fs, SharedVector{Float64}(2N))
-		push!(∂²Fs, SharedMatrix{Float64}(2N, 2N))
-	end
-	return ∂Fs, ∂²Fs
-end
-
-function generate_shared_cash(params::AbstractParamsNoB1)
-	np = nprocs()
-	N = params.N
-	∂Fs = Vector{SharedVector{Float64}}()
-	∂²Fs = Vector{SharedMatrix{Float64}}()
-	for i in Base.OneTo(np)
-		push!(∂Fs, SharedVector{Float64}(N))
-		push!(∂²Fs, SharedMatrix{Float64}(N, N))
+		push!(∂Fs, SharedVector{Float64}(N′))
+		push!(∂²Fs, SharedMatrix{Float64}(N′, N′))
 	end
 	return ∂Fs, ∂²Fs
 end
