@@ -17,7 +17,7 @@ function process_chunk!(∂F::SharedArray{Float64}, ∂²F::SharedArray{Float64}
 end
 
 function process_ΔF_chunk!(ΔFs_chunk, bs, params::AbstractParams, psamples::AbstractVector{NTuple{3, Float64}})
-	for i in eachindex(psmaples)
+	for i in eachindex(psamples)
 		(εₚ⁺, εₚ⁻, wₚ) = psamples[i]
 		ΔFs_chunk[i] = wₚ*compute_ΔFₚ!(bs, params, εₚ⁺, εₚ⁻)
 	end

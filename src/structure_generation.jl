@@ -175,6 +175,7 @@ function custom_eigen(U::SMatrix{2,2, Complex{Float64}})
 		S = SMatrix{2,2}([eigvecs[1,2] eigvecs[1,1]; eigvecs[2,2] eigvecs[2,1]])
 		S⁻¹ = inv(S)
 	end
+	#print(λ₁, "\n", λ₂, "\n", S, "\n", S⁻¹, "\n\n")
 	return λ₁, λ₂, S, S⁻¹
 end
 
@@ -231,7 +232,11 @@ function compute_full_span!(∂Fₚ, ∂²Fₚ, ∂U, ∂²U, U_cash, bs::Vector
 end
 
 function compute_ΔFₚ!(bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻)
-	U = compute_ordered_exp(process_bs(bs, params), εₚ⁻, Δτ)
+	β, m, N = params.β, params.m, params.N
+	Δτ = β/(m*N)
+	U = compute_ordered_exp(process_bs(bs, params), params.N, εₚ⁻, Δτ)
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
-	return log((cosh(β*εₚ⁺) + 0.5*(λ₁^m + λ₂^m))/(cosh(β*εₚ⁺)+cosh(β*εₚ⁻)))
+	#return log((cosh(β*εₚ⁺) + 0.5*(λ₁^m + λ₂^m))/(cosh(β*εₚ⁺)+cosh(β*εₚ⁻)))
+	εₚ⁺ = abs(εₚ⁺)
+	return ((1.0 + exp(-2β*εₚ⁺)+(λ₁/exp(β/m*εₚ⁺))^m + (λ₂/exp(β/m*εₚ⁺))^m)/(1.0 + exp(-2β*εₚ⁺) + exp(β*(εₚ⁻-εₚ⁺)) + exp(-β*(εₚ⁺+εₚ⁻))))
 end

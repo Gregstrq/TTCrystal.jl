@@ -115,11 +115,8 @@ function seek_minimum(params::AbstractParams, rdisp::ReducedDispersion, seed_fun
 end
 
 function compute_ΔFs(bs::AbstractVector{Float64}, params::AbstractParams, rdisp::ReducedDispersion, Nₚ::Int64)
-	psamples = get_psamples(rdisp, Nₚ)
-	ΔFs = SharedVector{Float64}(Nₚ)
-	np = nprocs()
-	chunk_size = div(Nₚ, np)
-	ΔFs_chunked = [view(ΔFs, (chunk_size*cid+1):min(Nₚ, chunk_size*(cid+1))) for cid=0:(np-1)]
+	psamples = generate_psamples(rdisp, Nₚ)
+	ΔFs_chunked = [SharedVector{Float64}(length(psamples[wid])) for wid in eachindex(psamples)]
     @sync begin
         for wid in true_workers()
 			@spawnat wid process_ΔF_chunk!(ΔFs_chunked[wid], bs, params, psamples[wid])
@@ -128,6 +125,14 @@ function compute_ΔFs(bs::AbstractVector{Float64}, params::AbstractParams, rdisp
 			@spawnat 1 process_ΔF_chunk!(ΔFs_chunked[1], bs, params, psamples[1])
 		end
     end
+	return vcat(ΔFs_chunked...)
+end
+
+
+function compute_ΔFs_sequential(bs::AbstractVector{Float64}, params::AbstractParams, rdisp::ReducedDispersion, Nₚ::Int64)
+	psamples = get_psamples(rdisp, Nₚ)
+	ΔFs = Vector{Float64}(undef, length(psamples))
+    process_ΔF_chunk!(ΔFs, bs, params, psamples)
 	return ΔFs
 end
 
@@ -145,4 +150,4 @@ function final_part(bs, params::AbstractParamsNoB1)
 	return mΔτ*u*sum(abs2, bs)
 end
 
-compute_free_energy(bs::AbstractVector{Float64}, params::AbstractParams, rdisp::ReducedDispersion, Nₚ::Int64) = sum_free_energy(bs, compute_ΔFs(bs, params, rdisp, Nₚ))
+compute_free_energy(bs::AbstractVector{Float64}, params::AbstractParams, rdisp::ReducedDispersion, Nₚ::Int64) = sum_free_energy(bs, compute_ΔFs_sequential(bs, params, rdisp, Nₚ), params)

@@ -75,10 +75,14 @@ end
 function separate_psamples(psamples_raw::Vector{NTuple{3,Float64}})
 	np = nprocs()
 	Nₚ = length(psamples_raw)
-	chunk_size = div(Nₚ, np)
+	chunk_size, num_extra = divrem(Nₚ, np)
 	psamples = Vector{Vector{NTuple{3,Float64}}}(undef, np)
-	for cid = 0:(np-1)
-		psamples[cid+1] = psamples_raw[(chunk_size*cid+1):min(Nₚ, chunk_size*(cid+1))]
+	for cid = 0:(num_extra-1)
+		psamples[cid+1] = psamples_raw[((chunk_size+1)*cid+1):(chunk_size+1)*(cid+1)]
+	end
+	n₀ = (chunk_size+1)*num_extra
+	for cid = 0:(np-num_extra-1)
+		psamples[num_extra+cid+1] = psamples_raw[(n₀+chunk_size*cid+1):min(Nₚ, n₀+chunk_size*(cid+1))]
 	end
 	return psamples
 end
