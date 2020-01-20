@@ -24,6 +24,16 @@ struct ParamsB1_pinned <: AbstractParamsB1
 	ParamsB1_pinned(N::Int64, m::Int64, β::Float64, U0::Float64, Ut0::Float64) = new(N, m, β, 1/U0, 1/Ut0, div(N,2)+1)
 end
 
+struct ParamsB1_pinned² <: AbstractParamsB1
+    N::Int64
+    m::Int64
+    β::Float64
+    u::Float64
+    u₁::Float64
+	i_pinned::Int64
+	ParamsB1_pinned²(N::Int64, m::Int64, β::Float64, U0::Float64, Ut0::Float64) = new(N, m, β, 1/U0, 1/Ut0, div(N,2)+1)
+end
+
 struct ParamsNoB1 <: AbstractParamsNoB1
     N::Int64
     m::Int64
