@@ -1,20 +1,15 @@
-function compute_ordered_exp(b_vec::AbstractVector{Float64}, b₁_vec::AbstractVector{Float64}, i::Int64, j::Int64, εₚ⁻::Float64, Δτ::Float64)
+############################
+
+function compute_ordered_exp(bs::T, i::Int64, j::Int64, εₚ⁻::Float64, Δτ::Float64) where T<:Tuple{AbstractVector{Float64}, Vararg{AbstractVector{Float64}}}
 	M = SA[1.0+0.0im 0.0; 0.0 1.0+0.0im]
 	for i′ = i:j
-		M = B(b_vec, b₁_vec, i′, εₚ⁻, Δτ)*M
+		M = B(bs, i′, εₚ⁻, Δτ)*M
 	end
 	return M
 end
 
-function compute_ordered_exp(b_vec::AbstractVector{Float64}, i::Int64, j::Int64, εₚ⁻::Float64, Δτ::Float64)
-	M = SA[1.0+0.0im 0.0; 0.0 1.0+0.0im]
-	for i′ = i:j
-		M = B(b_vec, i′, εₚ⁻, Δτ)*M
-	end
-	return M
-end
-
-function compute_ordered_exp(bs, N::Int64, εₚ⁻::Float64, Δτ::Float64)
+function compute_ordered_exp(bs::T, εₚ⁻::Float64, Δτ::Float64) where T<:Tuple{AbstractVector{Float64}, Vararg{AbstractVector{Float64}}}
+	N = length(bs[1])
 	M = SA[1.0+0.0im 0.0; 0.0 1.0+0.0im]
 	for i = N:-1:1
 		M = M*B(bs, i, εₚ⁻, Δτ)
@@ -22,8 +17,8 @@ function compute_ordered_exp(bs, N::Int64, εₚ⁻::Float64, Δτ::Float64)
 	return M
 end
 
-function compute_U_cash!(U_cash, b_vec, b₁_vec, εₚ⁻, Δτ)
-	N = length(b_vec)
+function compute_U_cash!(U_cash, bs::T, εₚ⁻, Δτ) where T<:Tuple{AbstractVector{Float64}, Vararg{AbstractVector{Float64}}}
+	N = length(bs[1])
 	M = SA[1.0+0.0im 0.0; 0.0 1.0+0.0im]
 	U_cash[N+1] = M
 	for i′ = N:-1:1
@@ -32,100 +27,30 @@ function compute_U_cash!(U_cash, b_vec, b₁_vec, εₚ⁻, Δτ)
 	end
 end
 
-function compute_U_cash!(U_cash, b_vec, εₚ⁻, Δτ)
-	N = length(b_vec)
-	M = SA[1.0+0.0im 0.0; 0.0 1.0+0.0im]
-	U_cash[N+1] = M
-	for i′ = N:-1:1
-		M = M*B(b_vec, i′, εₚ⁻, Δτ)
-		U_cash[i′] = M
-	end
-end
+############################
 
-function compute_single_period!(∂U, ∂²U, b_vec::AbstractVector{Float64}, b₁_vec::AbstractVector{Float64}, εₚ⁻, Δτ)
-	N = length(b_vec)
+function compute_single_period!(∂U::AbstractVector{SMatrix{2,2, Complex{Float64}}}, ∂²U::AbstractMatrix{SMatrix{2,2, Complex{Float64}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float64}}}, bs::NTuple{2, AbstractVector{Float64}}, εₚ⁻, Δτ)
+	N = length(bs[1])
 	∂₀U = @view ∂U[1:N]
 	∂₁U = @view ∂U[(N+1):2N]
 	∂²₀₀U = @view ∂²U[1:N, 1:N]
 	∂²₁₁U = @view ∂²U[(N+1):2N, (N+1):2N]
 	∂²₀₁U = @view ∂²U[1:N, (N+1):2N]
 	∂²₁₀U = @view ∂²U[(N+1):2N, 1:N]
-	N = length(b_vec)
-	U = compute_ordered_exp(b_vec, b₁_vec, 1, N, εₚ⁻, Δτ)
-	for i = 1:N
-		Mb = compute_ordered_exp(b_vec, b₁_vec, 1, i-1, εₚ⁻, Δτ)
-		Me = compute_ordered_exp(b_vec, b₁_vec, i+1, N, εₚ⁻, Δτ)
-		∂²₀₀U[i,i] = Me*B′′₀₀(b_vec, b₁_vec, i, εₚ⁻, Δτ)*Mb
-		∂²₀₁U[i,i] = Me*B′′₀₁(b_vec, b₁_vec, i, εₚ⁻, Δτ)*Mb
-		∂²₁₁U[i,i] = Me*B′′₁₁(b_vec, b₁_vec, i, εₚ⁻, Δτ)*Mb
-		Mb₀ = B′₀(b_vec, b₁_vec, i, εₚ⁻, Δτ)*Mb
-		Mb₁ = B′₁(b_vec, b₁_vec, i, εₚ⁻, Δτ)*Mb
-		∂₀U[i] = Me*Mb₀
-		∂₁U[i] = Me*Mb₁
-		for j = i+1:N
-			Mm = compute_ordered_exp(b_vec, b₁_vec, i+1, j-1, εₚ⁻, Δτ)
-			Mbm₀ = Mm*Mb₀
-			Mbm₁ = Mm*Mb₁
-			Me′ = compute_ordered_exp(b_vec, b₁_vec, j+1, N, εₚ⁻, Δτ)
-			Me₀ = Me′*B′₀(b_vec, b₁_vec, j, εₚ⁻, Δτ)
-			Me₁ = Me′*B′₁(b_vec, b₁_vec, j, εₚ⁻, Δτ)
-			∂²₀₀U[j, i] = Me₀*Mbm₀
-			∂²₀₀U[i, j] = ∂²₀₀U[j, i]
-			∂²₁₁U[j, i] = Me₁*Mbm₁
-			∂²₁₁U[i, j] = ∂²₁₁U[j, i]
-			∂²₀₁U[j, i] = Me₀*Mbm₁
-			∂²₀₁U[i, j] = Me₁*Mbm₀
-			∂²₁₀U[i, j] = ∂²₀₁U[j, i]
-			∂²₁₀U[j, i] = ∂²₀₁U[i, j]
-		end
-	end
-	return U
-end
-
-function compute_single_period!(∂U, ∂²U, b_vec::AbstractVector{Float64}, εₚ⁻, Δτ)
-	N = length(b_vec)
-	U = compute_ordered_exp(b_vec, 1, N, εₚ⁻, Δτ)
-	for i = 1:N
-		Mb = compute_ordered_exp(b_vec, 1, i-1, εₚ⁻, Δτ)
-		Me = compute_ordered_exp(b_vec, i+1, N, εₚ⁻, Δτ)
-		∂²U[i,i] = Me*B′′₀₀(b_vec, i, εₚ⁻, Δτ)*Mb
-		Mb₀ = B′₀(b_vec, i, εₚ⁻, Δτ)*Mb
-		∂U[i] = Me*Mb₀
-		for j = i+1:N
-			Mm = compute_ordered_exp(b_vec, i+1, j-1, εₚ⁻, Δτ)
-			Mbm₀ = Mm*Mb₀
-			Me′ = compute_ordered_exp(b_vec, j+1, N, εₚ⁻, Δτ)
-			Me₀ = Me′*B′₀(b_vec, j, εₚ⁻, Δτ)
-			∂²U[j, i] = Me₀*Mbm₀
-			∂²U[i, j] = ∂²U[j, i]
-		end
-	end
-	return U
-end
-
-
-function compute_single_period!(∂U, ∂²U, U_cash, b_vec::AbstractVector{Float64}, b₁_vec::AbstractVector{Float64}, εₚ⁻, Δτ)
-	N = length(b_vec)
-	∂₀U = @view ∂U[1:N]
-	∂₁U = @view ∂U[(N+1):2N]
-	∂²₀₀U = @view ∂²U[1:N, 1:N]
-	∂²₁₁U = @view ∂²U[(N+1):2N, (N+1):2N]
-	∂²₀₁U = @view ∂²U[1:N, (N+1):2N]
-	∂²₁₀U = @view ∂²U[(N+1):2N, 1:N]
-	compute_U_cash!(U_cash, b_vec, b₁_vec, εₚ⁻, Δτ)
+	compute_U_cash!(U_cash, bs, εₚ⁻, Δτ)
 	Mb = SA[1.0+0.0im 0.0; 0.0 1.0+0.0im]
 	for i = 1:N
-		∂²₀₀U[i,i] = U_cash[i+1]*B′′₀₀(b_vec, b₁_vec, i, εₚ⁻, Δτ)*Mb
-		∂²₀₁U[i,i] = U_cash[i+1]*B′′₀₁(b_vec, b₁_vec, i, εₚ⁻, Δτ)*Mb
+		∂²₀₀U[i,i] = U_cash[i+1]*B′′₀₀(bs, i, εₚ⁻, Δτ)*Mb
+		∂²₀₁U[i,i] = U_cash[i+1]*B′′₀₁(bs, i, εₚ⁻, Δτ)*Mb
 		∂²₁₀U[i,i] = ∂²₀₁U[i,i]
-		∂²₁₁U[i,i] = U_cash[i+1]*B′′₁₁(b_vec, b₁_vec, i, εₚ⁻, Δτ)*Mb
-		Mbm₀ = B′₀(b_vec, b₁_vec, i, εₚ⁻, Δτ)*Mb
-		Mbm₁ = B′₁(b_vec, b₁_vec, i, εₚ⁻, Δτ)*Mb
+		∂²₁₁U[i,i] = U_cash[i+1]*B′′₁₁(bs, i, εₚ⁻, Δτ)*Mb
+		Mbm₀ = B′₀(bs, i, εₚ⁻, Δτ)*Mb
+		Mbm₁ = B′₁(bs, i, εₚ⁻, Δτ)*Mb
 		∂₀U[i] = U_cash[i+1]*Mbm₀
 		∂₁U[i] = U_cash[i+1]*Mbm₁
 		for j = i+1:N
-			Me₀ = U_cash[j+1]*B′₀(b_vec, b₁_vec, j, εₚ⁻, Δτ)
-			Me₁ = U_cash[j+1]*B′₁(b_vec, b₁_vec, j, εₚ⁻, Δτ)
+			Me₀ = U_cash[j+1]*B′₀(bs, j, εₚ⁻, Δτ)
+			Me₁ = U_cash[j+1]*B′₁(bs, j, εₚ⁻, Δτ)
 			∂²₀₀U[j, i] = Me₀*Mbm₀
 			∂²₀₀U[i, j] = ∂²₀₀U[j, i]
 			∂²₁₁U[j, i] = Me₁*Mbm₁
@@ -134,32 +59,59 @@ function compute_single_period!(∂U, ∂²U, U_cash, b_vec::AbstractVector{Floa
 			∂²₀₁U[i, j] = Me₁*Mbm₀
 			∂²₁₀U[i, j] = ∂²₀₁U[j, i]
 			∂²₁₀U[j, i] = ∂²₀₁U[i, j]
-			Bⱼ = B(b_vec, b₁_vec, j, εₚ⁻, Δτ)
+			Bⱼ = B(bs, j, εₚ⁻, Δτ)
 			Mbm₀ = Bⱼ*Mbm₀
 			Mbm₁ = Bⱼ*Mbm₁
 		end
-		Mb = B(b_vec, b₁_vec, i, εₚ⁻, Δτ)*Mb
+		Mb = B(bs, i, εₚ⁻, Δτ)*Mb
 	end
 	return U_cash[1]
 end
 
-function compute_single_period!(∂U, ∂²U, U_cash, b_vec::AbstractVector, εₚ⁻, Δτ)
-	N = length(b_vec)
-	compute_U_cash!(U_cash, b_vec, εₚ⁻, Δτ)
+function compute_single_period!(∂U::AbstractVector{SMatrix{2,2, Complex{Float64}}}, ∂²U::AbstractMatrix{SMatrix{2,2, Complex{Float64}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float64}}}, bs::Tuple{AbstractVector{Float64}}, εₚ⁻, Δτ)
+	N = length(bs[1])
+	compute_U_cash!(U_cash, bs, εₚ⁻, Δτ)
 	Mb = SA[1.0+0.0im 0.0; 0.0 1.0+0.0im]
 	for i = 1:N
-		∂²U[i,i] = U_cash[i+1]*B′′₀₀(b_vec, i, εₚ⁻, Δτ)*Mb
-		Mbm₀ = B′₀(b_vec, i, εₚ⁻, Δτ)*Mb
+		∂²U[i,i] = U_cash[i+1]*B′′₀₀(bs, i, εₚ⁻, Δτ)*Mb
+		Mbm₀ = B′₀(bs, i, εₚ⁻, Δτ)*Mb
 		∂U[i] = U_cash[i+1]*Mbm₀
 		for j = i+1:N
-			∂²U[j, i] = U_cash[j+1]*B′₀(b_vec, j, εₚ⁻, Δτ)*Mbm₀
+			∂²U[j, i] = U_cash[j+1]*B′₀(bs, j, εₚ⁻, Δτ)*Mbm₀
 			∂²U[i, j] = ∂²U[j, i]
-			Mbm₀ = B(b_vec, j, εₚ⁻, Δτ)*Mbm₀
+			Mbm₀ = B(bs, j, εₚ⁻, Δτ)*Mbm₀
 		end
-		Mb = B(b_vec, i, εₚ⁻, Δτ)*Mb
+		Mb = B(bs, i, εₚ⁻, Δτ)*Mb
 	end
 	return U_cash[1]
 end
+
+function compute_single_period!(∂U::AbstractVector{SMatrix{2,2, Complex{Float64}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float64}}}, bs::NTuple{2, AbstractVector{Float64}}, εₚ⁻, Δτ)
+	N = length(bs[1])
+	∂₀U = @view ∂U[1:N]
+	∂₁U = @view ∂U[(N+1):2N]
+	compute_U_cash!(U_cash, bs, εₚ⁻, Δτ)
+	Mb = SA[1.0+0.0im 0.0; 0.0 1.0+0.0im]
+	for i = 1:N
+		∂₀U[i] = U_cash[i+1]*B′₀(bs, i, εₚ⁻, Δτ)*Mb
+		∂₁U[i] = U_cash[i+1]*B′₁(bs, i, εₚ⁻, Δτ)*Mb
+		Mb = B(bs, i, εₚ⁻, Δτ)*Mb
+	end
+	return U_cash[1]
+end
+
+function compute_single_period!(∂U::AbstractVector{SMatrix{2,2, Complex{Float64}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float64}}}, bs::Tuple{AbstractVector{Float64}}, εₚ⁻, Δτ)
+	N = length(bs[1])
+	compute_U_cash!(U_cash, bs, εₚ⁻, Δτ)
+	Mb = SA[1.0+0.0im 0.0; 0.0 1.0+0.0im]
+	for i = 1:N
+		∂U[i] = U_cash[i+1]*B′₀(bs, i, εₚ⁻, Δτ)*Mb
+		Mb = B(bs, i, εₚ⁻, Δτ)*Mb
+	end
+	return U_cash[1]
+end
+
+############################
 
 process_bs(bs, params::AbstractParamsNoB1) = (bs,)
 process_bs(bs, params::AbstractParamsB1) = (bs[1:params.N], bs[(params.N+1):2params.N])
@@ -179,33 +131,9 @@ function custom_eigen(U::SMatrix{2,2, Complex{Float64}})
 	return λ₁, λ₂, S, S⁻¹
 end
 
-function compute_full_span!(∂Fₚ, ∂²Fₚ, ∂U, ∂²U, U_cash, Um_cash::AbstractVector{SMatrix{2,2, Complex{Float64}}}, bs, params::AbstractParams, εₚ⁺, εₚ⁻)
+function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂²Fₚ::AbstractMatrix{Float64}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float64}}}, ∂²U::AbstractMatrix{SMatrix{2,2, Complex{Float64}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float64}}}, bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻)
 	N₀, N, m, β = length(bs), params.N, params.m, params.β
-	Um_cash[0] = SA[1.0+0.0im 0.0; 0.0 1.0+0.0im]
-	Um_cash[1] = compute_single_period!(∂U, ∂²U, U_cash, process_bs(bs, params)..., εₚ⁻, β/(N*m))
-	for k = 2:m
-		Um_cash[k] = Um_cash[1]^k
-	end
-	mFₚ⁻¹ = m*1.0/(2*cosh(β*εₚ⁺) + real(tr(Um_cash[m])))
-	for i = 1:N₀
-		∂Fₚ[i] = mFₚ⁻¹*real(tr(Um_cash[m-1]*∂U[i]))
-	end
-	for j = 1:N₀
-		for i = 1:N₀
-			Δf = real(tr(Um_cash[m-1]*∂²U[i,j]))
-			for k = 2:m
-				Δf += real(tr(Um_cash[m-k]*∂U[i]*Um_cash[k-2]*∂U[j]))
-			end
-			∂²Fₚ[i,j] = mFₚ⁻¹*Δf-∂Fₚ[i]*∂Fₚ[j]
-		end
-	end
-	return log((cosh(β*εₚ⁺) + 0.5*real(tr(Um_cash[m])))/(cosh(β*εₚ⁺)+cosh(β*εₚ⁻)))
-end
-
-
-function compute_full_span!(∂Fₚ, ∂²Fₚ, ∂U, ∂²U, U_cash, bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻)
-	N₀, N, m, β = length(bs), params.N, params.m, params.β
-	U = compute_single_period!(∂U, ∂²U, U_cash, process_bs(bs, params)..., εₚ⁻, β/(N*m))
+	U = compute_single_period!(∂U, ∂²U, U_cash, process_bs(bs, params), εₚ⁻, β/(N*m))
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
 	mFₚ⁻¹ = m/(2*cosh(β*εₚ⁺)/λ₁^m + 1.0 + (λ₂/λ₁)^m)
 	ll = 0.0
@@ -232,11 +160,24 @@ function compute_full_span!(∂Fₚ, ∂²Fₚ, ∂U, ∂²U, U_cash, bs::Vector
 	return Float64(log((cosh(β′*εₚ⁺) + 0.5*(λ₁′^m + λ₂′^m))/(cosh(β′*εₚ⁺)+cosh(β′*εₚ⁻))))
 end
 
-function compute_ΔFₚ!(bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻)
+function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float64}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float64}}}, bs::AbstractVector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ)
+	N₀, N, m, β = length(bs), params.N, params.m, params.β
+	U = compute_single_period!(∂U, U_cash, process_bs(bs, params), εₚ⁻, β/(N*m))
+	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
+	mFₚ⁻¹ = m/(2*cosh(β*εₚ⁺)/λ₁^m + 1.0 + (λ₂/λ₁)^m)
+	for i = 1:N₀
+		∂Uⁱₛ = S⁻¹*∂U[i]*S
+		∂Fₚ[i] += wₚ*mFₚ⁻¹*(1/λ₁)*real(∂Uⁱₛ[1,1]+(λ₂/λ₁)^(m-1)*∂Uⁱₛ[2,2])
+	end
+	β′, λ₁′, λ₂′ = BigFloat(β), BigFloat(λ₁), BigFloat(λ₂)
+	return wₚ*Float64(log((cosh(β′*εₚ⁺) + 0.5*(λ₁′^m + λ₂′^m))/(cosh(β′*εₚ⁺)+cosh(β′*εₚ⁻))))
+end
+
+function compute_full_span(bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ)
 	β, m, N = params.β, params.m, params.N
 	Δτ = β/(m*N)
 	U = compute_ordered_exp(process_bs(bs, params), params.N, εₚ⁻, Δτ)
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
 	β′, λ₁′, λ₂′ = BigFloat(β), BigFloat(λ₁), BigFloat(λ₂)
-	return Float64(log((cosh(β′*εₚ⁺) + 0.5*(λ₁′^m + λ₂′^m))/(cosh(β′*εₚ⁺)+cosh(β′*εₚ⁻))))
+	return wₚ*Float64(log((cosh(β′*εₚ⁺) + 0.5*(λ₁′^m + λ₂′^m))/(cosh(β′*εₚ⁺)+cosh(β′*εₚ⁻))))
 end
