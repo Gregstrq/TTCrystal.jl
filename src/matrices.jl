@@ -99,9 +99,6 @@ for B_func in (:B, :B⁻¹, :B′₀, :B′₁, :B′′₀₀, :B′′₀₁, 
 			b₁ = bs[2][i]
 			return $B_func(εₚ⁻, b, b₁, (εₚ⁻^2+b^2-b₁^2)*Δτ^2, Δτ)
 		end
-		function $B_func(bs::Tuple{AbstractVector{Float64}}, i::Int, εₚ⁻, Δτ)
-			b = bs[1][i]
-			return $B_func(εₚ⁻, b, 0.0, (εₚ⁻^2+b^2)*Δτ^2, Δτ)
-		end
+		@inline $B_func(bs::Tuple{AbstractVector{Float64}}, i::Int, εₚ⁻, Δτ) = $B_func(bs[1], i, εₚ⁻, Δτ)
 	end
 end
