@@ -100,11 +100,11 @@ function seek_minimum(params::AbstractParams, rdisp::ReducedDispersion, seed_fun
 	ΔF = 0.0
 	ϵ = 0.0
 	t = @elapsed data = precompute_newton_step!(∂Fs, ∂²Fs, bs, params, psamples)
-    print(t, " ", ϵ, " ",  0, "\n")
+	print(t, " ", data[1], " ", ϵ, " ",  0, "\n")
 	output(saver_o, bs, data..., 0.0, t, 0, params, rdisp, Nₚ, 0)
 	for i in Base.OneTo(max_iter)
 		t1 = @elapsed data1 = newton_step!(bs, ∂Fs, ∂²Fs, params, psamples)
-        print(t1, " ", data1[4], " ", i, "\n")
+		print(t1, " ", data1[1], " ", data1[4], " ", i, "\n")
 		output(saver_o, bs, data1..., t1, i, params, rdisp, Nₚ, i)
 		ΔF, ϵ = data1[1], data1[4]
 		if ϵ < ϵ₀

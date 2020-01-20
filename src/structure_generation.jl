@@ -228,7 +228,8 @@ function compute_full_span!(∂Fₚ, ∂²Fₚ, ∂U, ∂²U, U_cash, bs::Vector
 			∂²Fₚ[i,j] = mFₚ⁻¹*Δf-∂Fₚ[i]*∂Fₚ[j]
 		end
 	end
-	return log((cosh(β*εₚ⁺) + 0.5*(λ₁^m + λ₂^m))/(cosh(β*εₚ⁺)+cosh(β*εₚ⁻)))
+	β′, λ₁′, λ₂′ = BigFloat(β), BigFloat(λ₁), BigFloat(λ₂)
+	return Float64(log((cosh(β′*εₚ⁺) + 0.5*(λ₁′^m + λ₂′^m))/(cosh(β′*εₚ⁺)+cosh(β′*εₚ⁻))))
 end
 
 function compute_ΔFₚ!(bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻)
@@ -236,7 +237,6 @@ function compute_ΔFₚ!(bs::Vector{Float64}, params::AbstractParams, εₚ⁺, 
 	Δτ = β/(m*N)
 	U = compute_ordered_exp(process_bs(bs, params), params.N, εₚ⁻, Δτ)
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
-	#return log((cosh(β*εₚ⁺) + 0.5*(λ₁^m + λ₂^m))/(cosh(β*εₚ⁺)+cosh(β*εₚ⁻)))
-	εₚ⁺ = abs(εₚ⁺)
-	return ((1.0 + exp(-2β*εₚ⁺)+(λ₁/exp(β/m*εₚ⁺))^m + (λ₂/exp(β/m*εₚ⁺))^m)/(1.0 + exp(-2β*εₚ⁺) + exp(β*(εₚ⁻-εₚ⁺)) + exp(-β*(εₚ⁺+εₚ⁻))))
+	β′, λ₁′, λ₂′ = BigFloat(β), BigFloat(λ₁), BigFloat(λ₂)
+	return Float64(log((cosh(β′*εₚ⁺) + 0.5*(λ₁′^m + λ₂′^m))/(cosh(β′*εₚ⁺)+cosh(β′*εₚ⁻))))
 end
