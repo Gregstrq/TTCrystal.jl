@@ -29,6 +29,7 @@ mutable struct Optimizer{OptAlgType<:AbstractOptAlg, paramsType<:AbstractParams,
     alg::OptAlgType
     bs::Vector{Float64}
     ∂bs::Vector{Float64}
+	d∂bs::Vector{Float64}
     params::paramsType
     psamples::Vector{Vector{NTuple{3,Float64}}}
     ΔF::Float64
@@ -43,9 +44,11 @@ mutable struct Optimizer{OptAlgType<:AbstractOptAlg, paramsType<:AbstractParams,
     free_idxs::Vector{Float64}
 
     function Optimizer(alg::OptAlgType, bs, params::paramsType, psamples, max_iter, ϵ₀, f_cash::cashType, ls::LSType, algCash::T) where {OptAlgType<:AbstractOptAlg, paramsType<:AbstractParams, cashType<:AbstractSharedCash, LSType, T}
-        new{OptAlgType, paramsType, cashType, LSType, T}(alg, bs, similar(bs), params, psamples, 0.0, 0, max_iter, 0.0, ϵ₀, f_Cash, ls, algCash, get_pinned_idxs(params), get_free_idxs(params))
+		new{OptAlgType, paramsType, cashType, LSType, T}(alg, bs, zeroes(bs), similar(bs), params, psamples, 0.0, 0, max_iter, 0.0, ϵ₀, f_Cash, ls, algCash, get_pinned_idxs(params), get_free_idxs(params))
     end
 end
+
+@inline HM(O::Optimizer{BFGSOptAlg}) = O.algCash
 
 function Optimizer(alg::BFGSOptAlg, bs, params, psamples, max_iter=60, ϵ₀=1e-12)
     f_cash = generate_cash(alg, params)
@@ -55,8 +58,9 @@ function Optimizer(alg::BFGSOptAlg, bs, params, psamples, max_iter=60, ϵ₀=1e-
     return Optimizer(alg, bs, params, psamples, max_iter, ϵ₀, f_cash, ls, algCash)
 end
 
-function precompute_step!(O::Optimizer{BFGSOptAlg})
-    ΔF, ∂F = precompute_step!(O.f_cash, O.bs, O.params, O.psamples)
-    O.ΔF = ΔF
-    project_onto(O.∂bs) = 
+function init!(O::Optimizer{BFGSOptAlg})
+	ΔF, ∂F = precompute_step!(O.f_csh, O.bs, O.params, O.psamples)
+	O.ΔF = ΔF
+	mul!(project_onto(O.∂bs, O.free_idxs), HM(O), project_onto(∂F, O.free_idxs), -1.0, 0.0)
 end
+

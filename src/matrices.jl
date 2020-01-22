@@ -83,13 +83,13 @@ B′′₀₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[-b*b₁*Δτ im*(b+b�
 
 for B_func in (:B, :B⁻¹, :B′₀, :B′₁, :B′′₀₀, :B′′₀₁, :B′′₁₁)
 	@eval begin
-		function $B_func(b_vec, b₁_vec, i::Int, εₚ⁻, Δτ)
+		function $B_func(b_vec::AbstractVector, b₁_vec::AbstractVector, i::Int, εₚ⁻, Δτ)
 			b = b_vec[i]
 			b₁ = b₁_vec[i]
 			return $B_func(εₚ⁻, b, b₁, (εₚ⁻^2+b^2-b₁^2)*Δτ^2, Δτ)
 		end
 
-		function $B_func(b_vec, i::Int, εₚ⁻, Δτ)
+		function $B_func(b_vec::AbstractVector, i::Int, εₚ⁻, Δτ)
 			b = b_vec[i]
 			return $B_func(εₚ⁻, b, 0.0, (εₚ⁻^2+b^2)*Δτ^2, Δτ)
 		end

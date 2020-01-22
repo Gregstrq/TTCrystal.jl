@@ -52,9 +52,9 @@ function seed_sn(params::AbstractParams, rdisp::ReducedDispersion, Nₚ, range =
     k, γ = solve_sce_nob1(params, rdisp, Nₚ, range)
     dτ = β/(N*m) 
     τs = [dτ*(i-1) for i = 1:N]
-    sns = zeroes(N′)
+    sns = zeros(N′)
     sns[1:N] .= k*γ*Jacobi.sn.(γ*τs, k^2)
-    pin_bs!(bs, params)
+    pin_bs!(sns, params)
     return sns
 end
 
