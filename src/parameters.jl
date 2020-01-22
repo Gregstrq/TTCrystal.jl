@@ -51,15 +51,38 @@ struct ParamsNoB1_pinned <: AbstractParamsNoB1
     ParamsNoB1_pinned(N::Int64, m::Int64, β::Float64, U0::Float64) = new(N, m, β, 1/U0, div(N,2)+1)
 end
 
+get_pinned_idxs(params::Union{ParamsNoB1, ParamsB1}) = Int64[]
+get_pinned_idxs(params::Union{ParamsB1_pinned, ParamsNoB1_pinned}) = [1, params.i_pinned]
+function get_pinned_idxs(params::Union{ParamsB1_pinned²})
+    N, i_pinned = params.N, params.i_pinned
+    return [1, i_pinned, N+div(N,4)+1, N+div(N,4)+i_pinned]
+end
+
+get_free_idxs(params::AbstractParams) = [i for i=Base.OneTo(get_length(params)) if !(i in get_pinned_idxs(params))]
+
+@inline pin_bs!(bs::AbstractVector, params::AbstractParams) = pin_bs!(bs, get_pinned_idxs(params))
+@inline pin_bs!(bs::AbstractVector, params::Union{ParamsB1, ParamsNoB1}) = bs
+function pin_bs!(bs::AbstractVector{T}, pinned_idxs::Vector{Int64})
+    for i in pinned_idxs
+        bs[i] = zero(T)
+    end
+    return bs
+end
+
+@inline project_onto(a, params::AbstractParams) = project_onto(a, get_free_idxs(params))
+@inline project_onto(a, params::Union{ParamsB1, ParamsNoB1}) = a
+@inline project_onto(a::AbstractVector, free_idxs::Vector{Int64}) = view(a, free_idxs)
+@inline project_onto(a::AbstractMatrix, free_idxs::Vector{Int64}) = view(a, free_idxs)
+
 ################################
 
-abstract type AbstractOptModel end
+abstract type AbstractOptAlg end
 
-struct NewtonOptModel <: AbstractOptModel end
-struct BFGSOptModel <: AbstractOptModel end
+struct NewtonOptAlg <: AbstractOptAlg end
+struct BFGSOptAlg <: AbstractOptAlg end
 
-generate_cash(::NewtonOptModel, params::AbstractParams) = GH_Cash(params)
-generate_cash(::BFGSOptModel, params::AbstractParams) = G_Cash(params)
+generate_cash(::NewtonOptAlg, params::AbstractParams) = GH_Cash(params)
+generate_cash(::BFGSOptAlg, params::AbstractParams) = G_Cash(params)
 
 get_length(params::AbstractParamsB1) = 2params.N
 get_length(params::AbstractParamsNoB1) = params.N
@@ -72,9 +95,11 @@ struct GH_Cash <: AbstractSharedCash
 		N′ = get_length(params)
 		∂Fs = Vector{SharedVector{Float64}}()
 		∂²Fs = Vector{SharedMatrix{Float64}}()
-		for i in Base.OneTo(np)
-			push!(∂Fs, SharedVector{Float64}(N′))
-			push!(∂²Fs, SharedMatrix{Float64}(N′, N′))
+		push!(∂Fs, SharedVector{Float64}(N′))
+		push!(∂²Fs, SharedMatrix{Float64}(N′, N′))
+		for w in workers()
+			push!(∂Fs, fetch(@spawnat w SharedArrays.SharedVector{Float64}(N′)))
+			push!(∂²Fs, fetch(@spawnat w SharedArrays.SharedMatrix{Float64}(N′, N′)))
 		end
 		new(∂Fs, ∂²Fs)
 	end
@@ -82,20 +107,15 @@ end
 
 struct G_Cash <: AbstractSharedCash
 	∂Fs::Vector{SharedVector{Float64}}
-	∂Us::Vector{SharedVector{SMatrix{2,2, Complex{Float64}}}}
-	U_cashes::Vector{SharedVector{SMatrix{2,2, Complex{Float64}}}}
+	∂Us::DArray{SMatrix{2,2,Complex{Float64}}, 1, Vector{SMatrix{2,2,Complex{Float64}}}}
+	U_cashes::DArray{SMatrix{2,2,Complex{Float64}}, 1, Vector{SMatrix{2,2,Complex{Float64}}}}
 	function G_Cash(params::AbstractParams)
 		np = nprocs()
 		N = params.N
 		N′ = get_length(params)
-		∂Fs = Vector{SharedVector{Float64}}()
-		∂Us = Vector{SharedVector{SMatrix{2,2, Complex{Float64}}}}()
-		U_cashes = Vector{SharedVector{SMatrix{2,2, Complex{Float64}}}}()
-		for i in Base.OneTo(np)
-			push!(∂Fs, SharedVector{Float64}(N′))
-			push!(∂Us, SharedVector{SMatrix{2,2, Complex{Float64}}}(N′))
-			push!(U_cashes, SharedMatrix{SMatrix{2,2, Complex{Float64}}}(N+1))
-		end
+		∂Fs = [fetch(@spawnat i SharedArrays.SharedVector{Float64}(N′)) for i=procs()]
+		∂Us = DArray([@spawnat i Vector{StaticArrays.SMatrix{2,2, Complex{Float64}}}(undef, N′) for i=procs()])
+		U_cashes = DArray([@spawnat i Vector{StaticArrays.SMatrix{2,2, Complex{Float64}}}(undef, N+1) for i=procs()])
 		new(∂Fs, ∂Us, U_cashes)
 	end
 end
