@@ -62,7 +62,7 @@ get_free_idxs(params::AbstractParams) = [i for i=Base.OneTo(get_length(params)) 
 
 @inline pin_bs!(bs::AbstractVector, params::AbstractParams) = pin_bs!(bs, get_pinned_idxs(params))
 @inline pin_bs!(bs::AbstractVector, params::Union{ParamsB1, ParamsNoB1}) = bs
-function pin_bs!(bs::AbstractVector{T}, pinned_idxs::Vector{Int64})
+function pin_bs!(bs::AbstractVector{T}, pinned_idxs::Vector{Int64}) where {T}
     for i in pinned_idxs
         bs[i] = zero(T)
     end
@@ -114,8 +114,8 @@ struct G_Cash <: AbstractSharedCash
 		N = params.N
 		N′ = get_length(params)
 		∂Fs = [fetch(@spawnat i SharedArrays.SharedVector{Float64}(N′)) for i=procs()]
-		∂Us = DArray([@spawnat i Vector{StaticArrays.SMatrix{2,2, Complex{Float64}}}(undef, N′) for i=procs()])
-		U_cashes = DArray([@spawnat i Vector{StaticArrays.SMatrix{2,2, Complex{Float64}}}(undef, N+1) for i=procs()])
+		∂Us = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float64}}, N′) for i=procs()])
+		U_cashes = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float64}}, N+1) for i=procs()])
 		new(∂Fs, ∂Us, U_cashes)
 	end
 end

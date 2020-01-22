@@ -22,7 +22,7 @@ function compute_U_cash!(U_cash, bs::T, εₚ⁻, Δτ) where T<:Tuple{AbstractV
 	M = SA[1.0+0.0im 0.0; 0.0 1.0+0.0im]
 	U_cash[N+1] = M
 	for i′ = N:-1:1
-		M = M*B(b_vec, b₁_vec, i′, εₚ⁻, Δτ)
+		M = M*B(bs, i′, εₚ⁻, Δτ)
 		U_cash[i′] = M
 	end
 end
@@ -206,7 +206,7 @@ function process_chunk!(∂F::AbstractVector{Float64}, ∂U::AbstractVector{SMat
 	fill!(∂F, 0.0)
 	ΔF = zero(Float64)
 	for psample in psamples
-		ΔF += wₚ*compute_full_span!(∂F, ∂U, U_cash, bs, params, psample...)
+		ΔF += psample[3]*compute_full_span!(∂F, ∂U, U_cash, bs, params, psample...)
 	end
 	return ΔF
 end
@@ -249,9 +249,7 @@ function precompute_step!(GH_storage::GH_Cash, bs, params::AbstractParams, psamp
         for wid in true_workers()
 			fs[wid] = @spawnat wid process_chunk!(∂Fs[wid], ∂²Fs[wid], bs, params, psamples[wid])
         end
-		if nworkers()>1
-			fs[1] = @spawnat 1 process_chunk!(∂Fs[1], ∂²Fs[1], bs, params, psamples[1])
-		end
+		fs[1] = @spawnat 1 process_chunk!(∂Fs[1], ∂²Fs[1], bs, params, psamples[1])
     end
 	ΔF = sum(fetch.(fs))
     for wid in true_workers()
@@ -263,17 +261,16 @@ function precompute_step!(GH_storage::GH_Cash, bs, params::AbstractParams, psamp
 end
 
 function precompute_step!(G_storage::G_Cash, bs, params::AbstractParams, psamples)
-	∂Fs, ∂Us, U_cashes = G_storage.∂Fs, G_storage.∂²Fs, G_storage.U_cashes
+	∂Fs, ∂Us, U_cashes = G_storage.∂Fs, G_storage.∂Us, G_storage.U_cashes
 	fs = Vector{Future}(undef, nprocs())
     @sync begin
         for wid in true_workers()
 			fs[wid] = @spawnat wid process_chunk!(∂Fs[wid], DistributedArrays.localpart(∂Us), DistributedArrays.localpart(U_cashes), bs, params, psamples[wid])
         end
-		if nworkers()>1
-			fs[1] = @spawnat 1 process_chunk!(∂Fs[1], DistributedArrays.localpart(∂Us), DistributedArrays.localpart(U_cashes), bs, params, psamples[1])
-		end
+		fs[1] = @spawnat 1 process_chunk!(∂Fs[1], DistributedArrays.localpart(∂Us), DistributedArrays.localpart(U_cashes), bs, params, psamples[1])
     end
 	ΔF = sum(fetch.(fs))
+	print(typeof(∂Fs[2]), " ", length(∂Fs[2]), "\n")
     for wid in true_workers()
 		∂Fs[1] .+= ∂Fs[wid]
 	end
@@ -286,9 +283,7 @@ function precompute_step(bs::AbstractVector{Float64}, params::AbstractParams, ps
         for wid in true_workers()
 			fs[wid] = @spawnat wid process_chunk(bs, params, psamples[wid])
         end
-		if nworkers()>1
-			fs[1] = @spawnat 1 process_chunk(bs, params, psamples[1])
-		end
+		fs[1] = @spawnat 1 process_chunk(bs, params, psamples[1])
     end
 	ΔF = sum(fetch.(fs))
    	return finalize(ΔF, bs, params)
