@@ -1,6 +1,6 @@
 module TTCrystal
 
-using Distributed, DistributedArrays, LinearAlgebra, SharedArrays, HDF5, StaticArrays, Printf, OffsetArrays, Elliptic, Roots, NLSolversBase
+using Distributed, DistributedArrays, LinearAlgebra, SharedArrays, StaticArrays, Printf, OffsetArrays, Elliptic, Roots, NLSolversBase, Optim, Plots
 
 
 include("parameters.jl")

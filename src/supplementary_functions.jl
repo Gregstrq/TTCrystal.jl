@@ -94,3 +94,50 @@ function get_τs(params::AbstractParams)
 end
 
 show_sn(params::AbstractParams, rdisp::ReducedDispersion, Nₚ, range = (0.5, 0.99999)) = get_τs(params), seed_sn(params, rdisp, Nₚ, range)
+
+################################
+
+seed_const(c, params::TTCrystal.AbstractParamsNoB1) = fill!(Vector{Float64}(undef, params.N),c)
+function seed_const(c1, c2, params::ParamsB1)
+    N = params.N
+    bs = Vector{Float64}(undef, 2N)
+    bs[1:N] .= c1
+    bs[(N+1):2N] .= c2
+    return bs
+end
+
+################################
+
+isB1(params::AbstractParamsB1) = Val(true)
+isB1(params::AbstractParamsNoB1) = Val(false)
+
+function show_bs(res::Optim.MultivariateOptimizationResults, ::Val{true})
+    bs = Optim.minimizer(res)
+    N = div(length(bs), 2)
+    b0 = bs[1:N]
+    b1 = bs[(N+1):2N]
+    plot(b0)
+    plot!(b1)
+end
+function show_bs(res::Optim.MultivariateOptimizationResults, ::Val{false})
+    bs = Optim.minimizer(res)
+    plot(bs)
+end
+
+show_bs(res, params::AbstractParams) = show_bs(res, isB1(params))
+
+function check_derivative(bs)
+    N = div(length(bs), 2)
+    b0 = bs[1:N]
+    b1 = bs[(N+1):2N]
+    b_der = similar(b0)
+    b_der[1] = b0[2]-b0[end]
+    b_der[end] = b0[1]-b0[end-1]
+    for i=2:(N-1)
+        b_der[i] = b0[i+1] - b0[i-1]
+    end
+    b_der .*= -sum(abs, b1)/sum(abs, b_der)
+    plot(b_der)
+    plot!(b1)
+end
+check_derivative(res::Optim.MultivariateOptimizationResults) = check_derivative(Optim.minimizer(res))
