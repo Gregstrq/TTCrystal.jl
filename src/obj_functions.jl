@@ -16,4 +16,10 @@ function (fg!::bfgsObjFunc)(F,G, bs)
 	end
 end
 
+function construct_objective(params::AbstractParams, rdisp::ReducedDispersion, Nₚ, bs0=seed_sn(params, rdisp, Nₚ))
+    @assert get_length(params)==length(bs0)
+    fg! = bfgsObjFunc(params, rdisp, Nₚ)
+    return OnceDifferentiable(only_fg!(fg!), b0), b0
+end
+
 

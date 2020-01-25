@@ -95,12 +95,8 @@ struct GH_Cash <: AbstractSharedCash
 		N′ = get_length(params)
 		∂Fs = Vector{SharedVector{Float64}}()
 		∂²Fs = Vector{SharedMatrix{Float64}}()
-		push!(∂Fs, SharedVector{Float64}(N′))
-		push!(∂²Fs, SharedMatrix{Float64}(N′, N′))
-		for w in workers()
-			push!(∂Fs, fetch(@spawnat w SharedArrays.SharedVector{Float64}(N′)))
-			push!(∂²Fs, fetch(@spawnat w SharedArrays.SharedMatrix{Float64}(N′, N′)))
-		end
+        ∂Fs = [@fetchfrom pid SharedArrays.SharedVector{Float64}(N′; pids = procs()) for pid=procs()]
+        ∂²Fs = [@fetchfrom pid SharedArrays.SharedMatrix{Float64}(N′, N′; pids = procs()) for pid=procs()]
 		new(∂Fs, ∂²Fs)
 	end
 end
@@ -113,7 +109,7 @@ struct G_Cash <: AbstractSharedCash
 		np = nprocs()
 		N = params.N
 		N′ = get_length(params)
-		∂Fs = [fetch(@spawnat i SharedArrays.SharedVector{Float64}(N′)) for i=procs()]
+        ∂Fs = [SharedVector{Float64}(N′) for pid=procs()]
 		∂Us = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float64}}, N′) for i=procs()])
 		U_cashes = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float64}}, N+1) for i=procs()])
 		new(∂Fs, ∂Us, U_cashes)

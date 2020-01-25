@@ -176,7 +176,7 @@ end
 function compute_full_span(bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ)
 	β, m, N = params.β, params.m, params.N
 	Δτ = β/(m*N)
-	U = compute_ordered_exp(process_bs(bs, params), params.N, εₚ⁻, Δτ)
+	U = compute_ordered_exp(process_bs(bs, params), εₚ⁻, Δτ)
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
 	β′, λ₁′, λ₂′ = BigFloat(β), BigFloat(λ₁), BigFloat(λ₂)
 	return wₚ*Float64(log((cosh(β′*εₚ⁺) + 0.5*(λ₁′^m + λ₂′^m))/(cosh(β′*εₚ⁺)+cosh(β′*εₚ⁻))))
@@ -206,7 +206,7 @@ function process_chunk!(∂F::AbstractVector{Float64}, ∂U::AbstractVector{SMat
 	fill!(∂F, 0.0)
 	ΔF = zero(Float64)
 	for psample in psamples
-		ΔF += psample[3]*compute_full_span!(∂F, ∂U, U_cash, bs, params, psample...)
+		ΔF += compute_full_span!(∂F, ∂U, U_cash, bs, params, psample...)
 	end
 	return ΔF
 end
@@ -214,7 +214,7 @@ end
 function process_chunk(bs::AbstractVector{Float64}, params::AbstractParams, psamples::AbstractVector{NTuple{3, Float64}})
 	ΔF = zero(Float64)
 	for psample in psamples
-		ΔF += wₚ*compute_full_span!(bs, params, psample...)
+		ΔF += compute_full_span(bs, params, psample...)
 	end
 	return ΔF
 end
@@ -265,12 +265,12 @@ function precompute_step!(G_storage::G_Cash, bs, params::AbstractParams, psample
 	fs = Vector{Future}(undef, nprocs())
     @sync begin
         for wid in true_workers()
-			fs[wid] = @spawnat wid process_chunk!(∂Fs[wid], DistributedArrays.localpart(∂Us), DistributedArrays.localpart(U_cashes), bs, params, psamples[wid])
+			fs[wid] = @spawnat wid process_chunk!(∂Fs[wid], localpart(∂Us), localpart(U_cashes), bs, params, psamples[wid])
         end
-		fs[1] = @spawnat 1 process_chunk!(∂Fs[1], DistributedArrays.localpart(∂Us), DistributedArrays.localpart(U_cashes), bs, params, psamples[1])
+		fs[1] = @spawnat 1 process_chunk!(∂Fs[1], localpart(∂Us), localpart(U_cashes), bs, params, psamples[1])
     end
 	ΔF = sum(fetch.(fs))
-	print(typeof(∂Fs[2]), " ", length(∂Fs[2]), "\n")
+	#print(typeof(∂Fs[2]), " ", length(∂Fs[2]), "\n")
     for wid in true_workers()
 		∂Fs[1] .+= ∂Fs[wid]
 	end
@@ -304,7 +304,7 @@ function finalize!(∂F, ∂²F, ΔF, bs, params::AbstractParamsB1)
 		∂F[i] += 2mΔτ*u₁*bs[i]
 		∂²F[i,i] += 2mΔτ*u₁
 	end
-    return ΔF, pin_bs!(∂F), pin_bs!(∂²F)
+    return ΔF, pin_bs!(∂F, params), (∂²F)
 end
 
 function finalize!(∂F, ΔF, bs, params::AbstractParamsB1)
@@ -318,7 +318,7 @@ function finalize!(∂F, ΔF, bs, params::AbstractParamsB1)
 	for i = (N+1):2N
 		∂F[i] += 2mΔτ*u₁*bs[i]
 	end
-    return ΔF, pin_bs!(∂F)
+    return ΔF, pin_bs!(∂F, params)
 end
 
 function finalize(ΔF, bs, params::AbstractParamsB1)
@@ -337,7 +337,7 @@ function finalize!(∂F, ∂²F, ΔF, bs, params::AbstractParamsNoB1)
 		∂F[i] += 2mΔτ*u*bs[i]
 		∂²F[i,i] += 2mΔτ*u
 	end
-	return ΔF, ∂F, ∂²F
+    return ΔF, pin_bs!(∂F, params), ∂²F
 end
 
 function finalize!(∂F, ΔF, bs, params::AbstractParamsNoB1)
@@ -348,7 +348,7 @@ function finalize!(∂F, ΔF, bs, params::AbstractParamsNoB1)
 	for i = 1:N
 		∂F[i] += 2mΔτ*u*bs[i]
 	end
-	return ΔF, ∂F
+    return ΔF, pin_bs!(∂F, params)
 end
 
 function finalize(ΔF, bs, params::AbstractParamsNoB1)
