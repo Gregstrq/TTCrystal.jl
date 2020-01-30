@@ -65,21 +65,23 @@ end
 # Routines for construction of matrices
 ##############
 
-@inline M(εₚ⁻, b, b₁) = SA[-εₚ⁻ im*(b₁-b); im*(b₁+b) εₚ⁻]
+const im128 = Complex{Float128}(im)
 
-B(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[1.0 0.0; 0.0 1.0]*cosh_sqrt(κₚ²Δτ²) + M(εₚ⁻, b, b₁)*sinch_sqrt(κₚ²Δτ²)*Δτ
+@inline M(εₚ⁻, b, b₁) = SA[-εₚ⁻ im128*(b₁-b); im128*(b₁+b) εₚ⁻]
 
-B⁻¹(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[1.0 0.0; 0.0 1.0]*cosh_sqrt(κₚ²Δτ²) - M(εₚ⁻, b, b₁)*sinch_sqrt(κₚ²Δτ²)*Δτ
+B(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = one(SMatrix{2,2, Complex{Float128}})*cosh_sqrt(κₚ²Δτ²) + M(εₚ⁻, b, b₁)*sinch_sqrt(κₚ²Δτ²)*Δτ
 
-B′₀(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[b*Δτ -im; +im b*Δτ]*sinch_sqrt(κₚ²Δτ²)*Δτ + M(εₚ⁻, b, b₁)*lSinch_sqrt(κₚ²Δτ²)*b*Δτ^3
+B⁻¹(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = one(SMatrix{2,2, Complex{Float128}})*cosh_sqrt(κₚ²Δτ²) - M(εₚ⁻, b, b₁)*sinch_sqrt(κₚ²Δτ²)*Δτ
 
-B′₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[-b₁*Δτ im; im -b₁*Δτ]*sinch_sqrt(κₚ²Δτ²)*Δτ - M(εₚ⁻, b, b₁)*lSinch_sqrt(κₚ²Δτ²)*b₁*Δτ^3
+B′₀(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[b*Δτ -im128; +im128 b*Δτ]*sinch_sqrt(κₚ²Δτ²)*Δτ + M(εₚ⁻, b, b₁)*lSinch_sqrt(κₚ²Δτ²)*b*Δτ^3
 
-B′′₀₀(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[1.0 0.0; 0.0 1.0]*sinch_sqrt(κₚ²Δτ²)*Δτ^2 + SA[(-εₚ⁻+b^2*Δτ) im*(b₁-3b); im*(b₁+3b) (εₚ⁻+b^2*Δτ)]*lSinch_sqrt(κₚ²Δτ²)*Δτ^3 + M(εₚ⁻, b, b₁)*llSinch_sqrt(κₚ²Δτ²)*b^2*Δτ^5
+B′₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[-b₁*Δτ im128; im128 -b₁*Δτ]*sinch_sqrt(κₚ²Δτ²)*Δτ - M(εₚ⁻, b, b₁)*lSinch_sqrt(κₚ²Δτ²)*b₁*Δτ^3
 
-B′′₁₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = -SA[1.0 0.0; 0.0 1.0]*sinch_sqrt(κₚ²Δτ²)*Δτ^2 + SA[(εₚ⁻+b₁^2*Δτ) im*(b-3b₁); -im*(b+3b₁) (-εₚ⁻+b₁^2*Δτ)]*lSinch_sqrt(κₚ²Δτ²)*Δτ^3 + M(εₚ⁻, b, b₁)*llSinch_sqrt(κₚ²Δτ²)*b₁^2*Δτ^5
+B′′₀₀(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = one(SMatrix{2,2, Complex{Float128}})*sinch_sqrt(κₚ²Δτ²)*Δτ^2 + SA[(-εₚ⁻+b^2*Δτ) im128*(b₁-3b); im128*(b₁+3b) (εₚ⁻+b^2*Δτ)]*lSinch_sqrt(κₚ²Δτ²)*Δτ^3 + M(εₚ⁻, b, b₁)*llSinch_sqrt(κₚ²Δτ²)*b^2*Δτ^5
 
-B′′₀₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[-b*b₁*Δτ im*(b+b₁); im*(b+b₁) -b*b₁*Δτ]*lSinch_sqrt(κₚ²Δτ²)*Δτ^3 - M(εₚ⁻, b, b₁)*llSinch_sqrt(κₚ²Δτ²)*b*b₁*Δτ^5
+B′′₁₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = -one(SMatrix{2,2, Complex{Float128}})*sinch_sqrt(κₚ²Δτ²)*Δτ^2 + SA[(εₚ⁻+b₁^2*Δτ) im128*(b-3b₁); -im128*(b+3b₁) (-εₚ⁻+b₁^2*Δτ)]*lSinch_sqrt(κₚ²Δτ²)*Δτ^3 + M(εₚ⁻, b, b₁)*llSinch_sqrt(κₚ²Δτ²)*b₁^2*Δτ^5
+
+B′′₀₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[-b*b₁*Δτ im128*(b+b₁); im128*(b+b₁) -b*b₁*Δτ]*lSinch_sqrt(κₚ²Δτ²)*Δτ^3 - M(εₚ⁻, b, b₁)*llSinch_sqrt(κₚ²Δτ²)*b*b₁*Δτ^5
 
 for B_func in (:B, :B⁻¹, :B′₀, :B′₁, :B′′₀₀, :B′′₀₁, :B′′₁₁)
 	@eval begin

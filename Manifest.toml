@@ -127,6 +127,12 @@ git-tree-sha1 = "c690c2ab22ac9ee323d9966deae61a089362b25c"
 uuid = "28b8d3ca-fb5f-59d9-8090-bfdbd6d07a71"
 version = "0.44.0"
 
+[[GenericSchur]]
+deps = ["LinearAlgebra", "Printf"]
+git-tree-sha1 = "2f9297b94eaf14170d2694a9f3f313f293e0df23"
+uuid = "c145ed77-6b09-5dd9-b285-bf645a82121e"
+version = "0.3.0"
+
 [[GeometryTypes]]
 deps = ["ColorTypes", "FixedPointNumbers", "LinearAlgebra", "StaticArrays"]
 git-tree-sha1 = "a96baa00f5ac755689c82c29bc3395e161337c69"
@@ -263,6 +269,12 @@ version = "0.4.0"
 [[Printf]]
 deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+
+[[Quadmath]]
+deps = ["Printf", "Random", "Requires"]
+git-tree-sha1 = "7a11344be0bd27a98ce3038573c4df518f051a8f"
+uuid = "be4d8f0f-7fa4-5f49-b795-2f01399ab2dd"
+version = "0.5.2"
 
 [[REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets"]

@@ -103,15 +103,15 @@ end
 
 struct G_Cash <: AbstractSharedCash
 	∂Fs::Vector{SharedVector{Float64}}
-	∂Us::DArray{SMatrix{2,2,Complex{Float64}}, 1, Vector{SMatrix{2,2,Complex{Float64}}}}
-	U_cashes::DArray{SMatrix{2,2,Complex{Float64}}, 1, Vector{SMatrix{2,2,Complex{Float64}}}}
+	∂Us::DArray{SMatrix{2,2,Complex{Float128}}, 1, Vector{SMatrix{2,2,Complex{Float128}}}}
+	U_cashes::DArray{SMatrix{2,2,Complex{Float128}}, 1, Vector{SMatrix{2,2,Complex{Float128}}}}
 	function G_Cash(params::AbstractParams)
 		np = nprocs()
 		N = params.N
 		N′ = get_length(params)
         ∂Fs = [SharedVector{Float64}(N′) for pid=procs()]
-		∂Us = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float64}}, N′) for i=procs()])
-		U_cashes = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float64}}, N+1) for i=procs()])
+		∂Us = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float128}}, N′) for i=procs()])
+		U_cashes = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float128}}, N+1) for i=procs()])
 		new(∂Fs, ∂Us, U_cashes)
 	end
 end
