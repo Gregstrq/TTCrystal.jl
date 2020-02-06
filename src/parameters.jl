@@ -11,7 +11,6 @@ struct ParamsB1 <: AbstractParamsB1
     β::Float64
     u::Float64
     u₁::Float64
-    ParamsB1(N::Int64, m::Int64, β::Float64, U0::Float64, Ut0::Float64) = new(N, m, β, 1/U0, 1/Ut0)
 end
 
 struct ParamsB1_pinned <: AbstractParamsB1
@@ -21,7 +20,7 @@ struct ParamsB1_pinned <: AbstractParamsB1
     u::Float64
     u₁::Float64
 	i_pinned::Int64
-	ParamsB1_pinned(N::Int64, m::Int64, β::Float64, U0::Float64, Ut0::Float64) = new(N, m, β, 1/U0, 1/Ut0, div(N,2)+1)
+	ParamsB1_pinned(N::Int64, m::Int64, β::Float64, u::Float64, u₁::Float64) = new(N, m, β, u, u₁, div(N,2)+1)
 end
 
 struct ParamsB1_pinned² <: AbstractParamsB1
@@ -31,7 +30,7 @@ struct ParamsB1_pinned² <: AbstractParamsB1
     u::Float64
     u₁::Float64
 	i_pinned::Int64
-	ParamsB1_pinned²(N::Int64, m::Int64, β::Float64, U0::Float64, Ut0::Float64) = new(N, m, β, 1/U0, 1/Ut0, div(N,2)+1)
+	ParamsB1_pinned²(N::Int64, m::Int64, β::Float64, u::Float64, u₁::Float64) = new(N, m, β, u, u₁, div(N,2)+1)
 end
 
 struct ParamsNoB1 <: AbstractParamsNoB1
@@ -39,7 +38,6 @@ struct ParamsNoB1 <: AbstractParamsNoB1
     m::Int64
     β::Float64
     u::Float64
-    ParamsNoB1(N::Int64, m::Int64, β::Float64, U0::Float64) = new(N, m, β, 1/U0)
 end
 
 struct ParamsNoB1_pinned <: AbstractParamsNoB1
@@ -48,7 +46,37 @@ struct ParamsNoB1_pinned <: AbstractParamsNoB1
     β::Float64
     u::Float64
 	i_pinned::Int64
-    ParamsNoB1_pinned(N::Int64, m::Int64, β::Float64, U0::Float64) = new(N, m, β, 1/U0, div(N,2)+1)
+    ParamsNoB1_pinned(N::Int64, m::Int64, β::Float64, u::Float64) = new(N, m, β, u, div(N,2)+1)
+end
+
+function get_u₀(β, psamples_raw)
+    s = 0.0
+	for (εₚ⁺, εₚ⁻, wₚ) in psamples_raw
+        κₚ = sqrt(εₚ⁻^2 + 1.0)
+        s += wₚ*(sign(εₚ⁺+κₚ) + sign(κₚ-εₚ⁺))/κₚ
+    end
+    return s/4.0
+end
+
+for Params_constr in Symbol.(subtypes(AbstractParamsB1))
+	@eval begin
+		function $Params_constr(β::Float64, m::Int64, Δτ::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}})
+			N = 4*(div(ceil(Int64, β/(m*Δτ)), 4) + 1)
+			u₀ = get_u₀(β, psamples_raw)
+			u₁ = u₀*a
+			return $Params_constr(N, m, β, u₀, u₁)
+		end
+	end
+end
+
+for Params_constr in Symbol.(subtypes(AbstractParamsNoB1))
+	@eval begin
+		function $Params_constr(β::Float64, m::Int64, Δτ::Float64, psamples_raw::Vector{NTuple{3, Float64}})
+			N = 4*(div(ceil(Int64, β/(m*Δτ)), 4) + 1)
+			u₀ = get_u₀(β, psamples_raw)
+			return $Params_constr(N, m, β, u₀)
+		end
+	end
 end
 
 get_pinned_idxs(params::Union{ParamsNoB1, ParamsB1}) = Int64[]
@@ -101,7 +129,7 @@ struct GH_Cash <: AbstractSharedCash
 	end
 end
 
-struct G_Cash <: AbstractSharedCash
+mutable struct G_Cash <: AbstractSharedCash
 	∂Fs::Vector{SharedVector{Float64}}
 	∂Us::DArray{SMatrix{2,2,Complex{Float128}}, 1, Vector{SMatrix{2,2,Complex{Float128}}}}
 	U_cashes::DArray{SMatrix{2,2,Complex{Float128}}, 1, Vector{SMatrix{2,2,Complex{Float128}}}}
@@ -112,8 +140,15 @@ struct G_Cash <: AbstractSharedCash
         ∂Fs = [SharedVector{Float64}(N′) for pid=procs()]
 		∂Us = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float128}}, N′) for i=procs()])
 		U_cashes = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float128}}, N+1) for i=procs()])
-		new(∂Fs, ∂Us, U_cashes)
+		g_cash = new(∂Fs, ∂Us, U_cashes)
+		finalizer(free_darrays, g_cash)
+		return g_cash
 	end
+end
+
+function free_darrays(g_cash::G_Cash)
+	close(g_cash.∂Us)
+	close(g_cash.U_cashes)
 end
 
 ################################
@@ -126,14 +161,21 @@ struct ReducedDispersion <: AbstractDispersion
 end
 
 wfunc(y::Float64) = y==0.0 ? 0.0 : y^2*log((1+sqrt(1-y^6))/abs(y)^3)
+wfunc_gauss(y::Real) = log((1+sqrt(1-y^2))/abs(y))
 
 (rdisp::ReducedDispersion)(y::Float64, dy::Float64) = (-rdisp.μ, rdisp.P + rdisp.α*rdisp.Λ*y^3, wfunc(y)*6dy*rdisp.Λ/(2π)^2)::NTuple{3,Float64}
 
+#function get_psamples(rdisp::ReducedDispersion, Nₚ)
+#    psamples_raw = rdisp.(range(-1.0,1.0; length = Nₚ), 2.0/(Nₚ-1))
+#	psamples_raw[1] = (psamples_raw[1][1], psamples_raw[1][2], 0.5*psamples_raw[1][3])
+#	psamples_raw[end] = (psamples_raw[end][1], psamples_raw[end][2], 0.5*psamples_raw[end][3])
+#	return psamples_raw
+#end
+
 function get_psamples(rdisp::ReducedDispersion, Nₚ)
-    psamples_raw = rdisp.(range(-1.0,1.0; length = Nₚ), 2.0/(Nₚ-1))
-	psamples_raw[1] = (psamples_raw[1][1], psamples_raw[1][2], 0.5*psamples_raw[1][3])
-	psamples_raw[end] = (psamples_raw[end][1], psamples_raw[end][2], 0.5*psamples_raw[end][3])
-	return psamples_raw
+	temp_quad(f, _a, _b; kwargs...) = quadgk(f, -1.0, 0.0, 1.0; kwargs...)
+	ys, ws = gauss(wfunc_gauss, Nₚ, -1.0, 1.0; quad=temp_quad)
+	return [(-rdisp.μ, rdisp.P + rdisp.Λ*ys[i], 2*rdisp.Λ*ws[i]/(rdisp.α*(2pi)^2)) for i in eachindex(ws)]
 end
 
 function separate_psamples(psamples_raw::Vector{NTuple{3,Float64}})

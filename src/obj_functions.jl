@@ -23,3 +23,8 @@ function construct_objective(params::AbstractParams, rdisp::ReducedDispersion, N
 end
 
 
+function construct_objective(params::AbstractParams, psamples::Vector{Vector{NTuple{3, Float64}}}, bs0)
+    @assert get_length(params)==length(bs0)
+	fg! = bfgsObjFunc(params, G_Cash(params), psamples)
+    return OnceDifferentiable(only_fg!(fg!), bs0)
+end

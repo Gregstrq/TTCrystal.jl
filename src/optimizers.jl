@@ -1,66 +1,148 @@
-
-function newton_step!(bs, ∂Fs, ∂²Fs, params::AbstractParams, psamples)
-	dbs = -∂²Fs[1]\∂Fs[1]
-	bs .+= dbs
-	return precompute_step!(∂Fs, ∂²Fs, bs, params, psamples)..., norm(dbs)
+struct LocalExtremum
+	val::Float64
+	bs::Vector{Float64}
 end
 
-get_is(params::ParamsNoB1_pinned) = [i for i=1:get_length(params) if (i!=1)&&(i!=params.i_pinned)]
-
-function get_is(params::ParamsB1_pinned)
-	N = params.N
-	i_pinned = params.i_pinned
-	blacklist = [1, i_pinned, N+div(N,4)+1, N+div(N,4)+i_pinned]
-	return [i for i=1:get_length(params) if !(i in blacklist)]
+for op in (Symbol(==), :<, :>, :<=, :>=)
+	@eval begin
+		$op(a::T, b::T) where {T<:LocalExtremum} = $op(a.val, b.val)
+	end
 end
 
-function newton_step!(bs, ∂Fs, ∂²Fs, params::T, psamples) where {T<:Union{ParamsB1_pinned, ParamsNoB1_pinned}}
-	is = get_is(params) 
-	∂Fv = @view ∂Fs[1][is]
-	∂²Fv = @view ∂²Fs[1][is,is]
-	dbs = fill!(similar(bs), 0.0)
-	dbsv = @view dbs[is]
-	dbsv .= -∂²Fv\∂Fv
-	bs .+= dbs
-	return precompute_step!(∂Fs, ∂²Fs, bs, params, psamples)..., norm(dbs)
+function FibonacciSearch(func)
+	f1 = 1
+	x = func(1)
+	f2 = 2
+	y = func(2)
+	if y>=x
+		return x, 1
+	end
+	f3 = 3
+	z = func(3)
+	while (z<y)
+		f3, f2, f1 = (f3+f2, f3, f2)
+		z ,y, x = func(f3), z, y
+	end
+	f′ = f2
+	while (f′=f1+(f3-f2))!=f2
+		v′ = func(f′)
+		if f′>f2
+			if v′>=y
+				f3, f2, f1 = f′, f2, f1
+				z, y, x = v′, y, x
+			else
+				f3, f2, f1 = f3, f′, f2
+				z, y, x = z, v′, y
+			end
+		else
+			if v′>y
+				f3, f2, f1 = f3, f2, f′
+				z, y, x = z, y, v′
+			else
+				f3, f2, f1 = f2, f′, f1
+				z, y, x = y, v′, x
+			end
+		end
+	end
+	return y, f2
 end
 
-mutable struct Optimizer{OptAlgType<:AbstractOptAlg, paramsType<:AbstractParams, cashType<:AbstractSharedCash, LSType, T}
-    alg::OptAlgType
-    bs::Vector{Float64}
-    ∂bs::Vector{Float64}
-	d∂bs::Vector{Float64}
-    params::paramsType
-    psamples::Vector{Vector{NTuple{3,Float64}}}
-    ΔF::Float64
+mutable struct Saver
+    filename::AbstractString
     iter::Int64
-    max_iter::Int64
-    ϵ::Float64
-    ϵ₀::Float64
-    f_cash::cashType
-    ls::LSType
-    algCash::T
-    pinned_idxs::Vector{Int64}
-    free_idxs::Vector{Float64}
-
-    function Optimizer(alg::OptAlgType, bs, params::paramsType, psamples, max_iter, ϵ₀, f_cash::cashType, ls::LSType, algCash::T) where {OptAlgType<:AbstractOptAlg, paramsType<:AbstractParams, cashType<:AbstractSharedCash, LSType, T}
-		new{OptAlgType, paramsType, cashType, LSType, T}(alg, bs, zeroes(bs), similar(bs), params, psamples, 0.0, 0, max_iter, 0.0, ϵ₀, f_Cash, ls, algCash, get_pinned_idxs(params), get_free_idxs(params))
+    function Saver(filename::AbstractString)
+        filename_full = filename * ".jld2"
+        close(jldopen(filename_full, "w"))
+        new(filename_full, 1)
     end
 end
 
-@inline HM(O::Optimizer{BFGSOptAlg}) = O.algCash
-
-function Optimizer(alg::BFGSOptAlg, bs, params, psamples, max_iter=60, ϵ₀=1e-12)
-    f_cash = generate_cash(alg, params)
-    ls = MoreThuente()
-    N′′ = length(get_free_idxs(params))
-    algCash = Matrix{Float64}(I, N′′, N′′)
-    return Optimizer(alg, bs, params, psamples, max_iter, ϵ₀, f_cash, ls, algCash)
+macro stash!(group, args...)
+    exs = [:($(esc(group))[$(string(arg))] = $(esc(arg))) for arg in args]
+    return Expr(:block, exs...)
 end
 
-function init!(O::Optimizer{BFGSOptAlg})
-	ΔF, ∂F = precompute_step!(O.f_csh, O.bs, O.params, O.psamples)
-	O.ΔF = ΔF
-	mul!(project_onto(O.∂bs, O.free_idxs), HM(O), project_onto(∂F, O.free_idxs), -1.0, 0.0)
+function Saver(filename::AbstractString, μ, α, Nₚ, β, Δτ, a, opt)
+    saver_o = Saver(filename)
+    jldopen(saver_o.filename, "a") do file
+        @stash!(file, μ, α, Nₚ, β, Δτ, a, opt)
+    end
 end
 
+function save_data(saver_o, P, Λ, static_fmin, m_opt, f_min, bs_opt, τs)
+    jldopen(saver_o.filename, "a") do file
+        g = JLD2.Group(file, "dset_$(saver_o.iter)")
+        @stash!(g, P, Λ, static_fmin, m_opt, f_min, bs_opt, τs)
+    end
+    saver_o.iter += 1
+end
+
+
+function get_optimum_fixed_m(m::Int64, β::Float64, Δτ::Float64, u, u₁, psamples, psamples_raw, opt::Optim.Options)
+	t′ = -time()
+    @info "Performing calculation for m = $m.\n"
+	N = 4*(div(ceil(Int64, β/(m*Δτ)), 4) + 1)
+	params = ParamsB1_pinned(N, m, β, u, u₁)
+	bs0 = seed_sn(params, psamples_raw)
+	d= construct_objective(params, psamples, bs0)
+	results = optimize(d, bs0, LBFGS(m=20, linesearch = MoreThuente()), opt)
+	val = Optim.minimum(results)
+	bs = Optim.minimizer(results)
+	t′ += time()
+	@info "This calculation took $t′ s.\nCorresponding free energy is: $val.\n\n" 
+	return LocalExtremum(val, bs)
+end
+
+function get_optimum(P::Float64, Λ::Float64, μ::Float64, α::Float64, Nₚ::Int64, β::Float64, Δτ::Float64, a::Float64, opt::Optim.Options)
+	rdisp = ReducedDispersion(α, P, μ, Λ)
+	psamples_raw = get_psamples(rdisp, Nₚ)
+	psamples = separate_psamples(psamples_raw)
+	u = get_u₀(β, psamples_raw)
+	u₁ = u*a
+    static_fmin = get_static_fmin(β, u, psamples_raw)
+	@info "Free energy of static configuration for this tuple is: $static_fmin.\n\n"
+	get_opt_for_m = (m)->get_optimum_fixed_m(m, β, Δτ, u, u₁, psamples, psamples_raw, opt)
+	optimum, m_opt = FibonacciSearch(get_opt_for_m)
+	N_opt = 4*(div(ceil(Int64, β/(m_opt*Δτ)), 4) + 1)
+    return static_fmin, m_opt, optimum.val, optimum.bs, get_τs(β, m_opt, N_opt)
+end
+
+function params_walkthrough(P_range::AbstractRange, Λ_range::AbstractRange, saver_o::Saver, μ::Float64, α::Float64, Nₚ::Int64, β::Float64, Δτ::Float64, a::Float64, opt::Optim.Options)
+	tups = reshape([tup for tup in product(P_range, Λ_range)], length(P_range)*length(Λ_range))
+	sort!(tups; by=(tup)->sum(abs2, tup))
+    f_mins = similar(tups, Union{Float64, Missing})
+    static_f_mins = similar(tups, Union{Float64, Missing})
+    fill!(f_mins, missing)
+    fill!(static_f_mins, missing)
+    N_tot = length(tups)
+    t0 = time()
+    for i in eachindex(tups)
+        t1 = time()
+        (P, Λ) = tups[i]
+        @info "I am currently dealing with $i-th tuple of (P, Λ), which is (P, Λ) = ($P, $Λ).\n\n"
+        try
+		    static_f_min, m_opt, f_min, bs_opt, τs = get_optimum(P, Λ, μ, α, Nₚ, β, Δτ, a, opt)
+			save_data(saver_o, P, Λ, static_f_min, m_opt, f_min, bs_opt, τs)
+			static_f_mins[i] = static_f_min
+			f_mins[i] = f_min
+        catch ex
+			stacktrace_string = catch_backtrace() |> stacktrace |> process_stacktrace
+			@error "This Error occured for $i-th tuple of (P, Λ), which is (P, Λ) = ($P, $Λ).\n $ex\n$stacktrace_string\n\n"
+			static_f_min, m_opt, f_min, bs_opt, τs = missing, missing, missing, missing, missing
+			save_data(saver_o, P, Λ, static_f_min, m_opt, f_min, bs_opt, τs)
+			static_f_mins[i] = missing
+			f_mins[i] = missing
+        end
+        t2 = time()
+        @info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (P, Λ) = ($P, $Λ). This run took $(t2-t1) s.\n\n"
+	end
+    return tups, static_fmins, fmins
+end
+
+function process_stacktrace(st)
+	str = "\t[1]\t"*string(st[1])
+	for i = 2:length(st)
+		str = str * "\n\t[$i]\t$(string(st[i]))"
+	end
+	return str
+end

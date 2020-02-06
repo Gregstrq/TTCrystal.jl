@@ -66,6 +66,7 @@ end
 ##############
 
 const im128 = Complex{Float128}(im)
+const one128 = one(Complex{Float128})
 
 @inline M(εₚ⁻, b, b₁) = SA[-εₚ⁻ im128*(b₁-b); im128*(b₁+b) εₚ⁻]
 
@@ -75,6 +76,8 @@ B⁻¹(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = one(SMatrix{2,2, Complex{Float1
 
 B′₀(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[b*Δτ -im128; +im128 b*Δτ]*sinch_sqrt(κₚ²Δτ²)*Δτ + M(εₚ⁻, b, b₁)*lSinch_sqrt(κₚ²Δτ²)*b*Δτ^3
 
+B′ₑ(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[(εₚ⁻*Δτ-one128) 0.0; 0.0 (εₚ⁻*Δτ+one128)]*sinch_sqrt(κₚ²Δτ²)*Δτ + M(εₚ⁻, b, b₁)*lSinch_sqrt(κₚ²Δτ²)*εₚ⁻*Δτ^3
+
 B′₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[-b₁*Δτ im128; im128 -b₁*Δτ]*sinch_sqrt(κₚ²Δτ²)*Δτ - M(εₚ⁻, b, b₁)*lSinch_sqrt(κₚ²Δτ²)*b₁*Δτ^3
 
 B′′₀₀(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = one(SMatrix{2,2, Complex{Float128}})*sinch_sqrt(κₚ²Δτ²)*Δτ^2 + SA[(-εₚ⁻+b^2*Δτ) im128*(b₁-3b); im128*(b₁+3b) (εₚ⁻+b^2*Δτ)]*lSinch_sqrt(κₚ²Δτ²)*Δτ^3 + M(εₚ⁻, b, b₁)*llSinch_sqrt(κₚ²Δτ²)*b^2*Δτ^5
@@ -83,7 +86,7 @@ B′′₁₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = -one(SMatrix{2,2, Comple
 
 B′′₀₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[-b*b₁*Δτ im128*(b+b₁); im128*(b+b₁) -b*b₁*Δτ]*lSinch_sqrt(κₚ²Δτ²)*Δτ^3 - M(εₚ⁻, b, b₁)*llSinch_sqrt(κₚ²Δτ²)*b*b₁*Δτ^5
 
-for B_func in (:B, :B⁻¹, :B′₀, :B′₁, :B′′₀₀, :B′′₀₁, :B′′₁₁)
+for B_func in (:B, :B⁻¹, :B′₀, :B′₁, :B′′₀₀, :B′′₀₁, :B′′₁₁, :B′ₑ)
 	@eval begin
 		function $B_func(b_vec::AbstractVector, b₁_vec::AbstractVector, i::Int, εₚ⁻, Δτ)
 			b = b_vec[i]
