@@ -48,13 +48,9 @@ function FibonacciSearch(func)
 end
 
 mutable struct Saver
-    filename::AbstractString
+	dirname::AbstractString
     iter::Int64
-    function Saver(filename::AbstractString)
-        filename_full = filename * ".jld2"
-        close(jldopen(filename_full, "w"))
-        new(filename_full, 1)
-    end
+	Saver(dirname::AbstractString = pwd()) = (mkpath(dirname); new(dirname, 1))
 end
 
 macro stash!(group, args...)
@@ -62,29 +58,22 @@ macro stash!(group, args...)
     return Expr(:block, exs...)
 end
 
-function Saver(filename::AbstractString, μ, α, Nₚ, β, Δτ, a, opt)
-    saver_o = Saver(filename)
-    jldopen(saver_o.filename, "a") do file
-        @stash!(file, μ, α, Nₚ, β, Δτ, a, opt)
-    end
-end
 
 function save_data(saver_o, P, Λ, static_fmin, m_opt, f_min, bs_opt, τs)
-    jldopen(saver_o.filename, "a") do file
-        g = JLD2.Group(file, "dset_$(saver_o.iter)")
-        @stash!(g, P, Λ, static_fmin, m_opt, f_min, bs_opt, τs)
+    jldopen("dset_$(saver_o.iter).jld2", "w") do file
+        @stash!(file, P, Λ, static_fmin, m_opt, f_min, bs_opt, τs)
     end
     saver_o.iter += 1
 end
 
 
-function get_optimum_fixed_m(m::Int64, β::Float64, Δτ::Float64, u, u₁, psamples, psamples_raw, opt::Optim.Options)
+function get_optimum_fixed_m(m::Int64, β::Float64, Δτ::Float64, u, u₁, psamples, psamples_raw, opt::Optim.Options, γ)
 	t′ = -time()
     @info "Performing calculation for m = $m.\n"
 	N = 4*(div(ceil(Int64, β/(m*Δτ)), 4) + 1)
 	params = ParamsB1_pinned(N, m, β, u, u₁)
 	bs0 = seed_sn(params, psamples_raw)
-	d= construct_objective(params, psamples, bs0)
+	d= construct_objective(params, psamples, γ, bs0)
 	results = optimize(d, bs0, LBFGS(m=20, linesearch = MoreThuente()), opt)
 	val = Optim.minimum(results)
 	bs = Optim.minimizer(results)
@@ -99,9 +88,9 @@ function get_optimum(P::Float64, Λ::Float64, μ::Float64, α::Float64, Nₚ::In
 	psamples = separate_psamples(psamples_raw)
 	u = get_u₀(β, psamples_raw)
 	u₁ = u*a
-    static_fmin = get_static_fmin(β, u, psamples_raw)
+    γ, static_fmin = get_static_fmin(β, u, psamples_raw)
 	@info "Free energy of static configuration for this tuple is: $static_fmin.\n\n"
-	get_opt_for_m = (m)->get_optimum_fixed_m(m, β, Δτ, u, u₁, psamples, psamples_raw, opt)
+	get_opt_for_m = (m)->get_optimum_fixed_m(m, β, Δτ, u, u₁, psamples, psamples_raw, opt, γ)
 	optimum, m_opt = FibonacciSearch(get_opt_for_m)
 	N_opt = 4*(div(ceil(Int64, β/(m_opt*Δτ)), 4) + 1)
     return static_fmin, m_opt, optimum.val, optimum.bs, get_τs(β, m_opt, N_opt)
@@ -134,7 +123,7 @@ function params_walkthrough(P_range::AbstractRange, Λ_range::AbstractRange, sav
 			f_mins[i] = missing
         end
         t2 = time()
-        @info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (P, Λ) = ($P, $Λ). This run took $(t2-t1) s.\n\n"
+        @info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (P, Λ) = ($P, $Λ). This run took $(t2-t1) s.\n\n\n\n"
 	end
     return tups, static_fmins, fmins
 end

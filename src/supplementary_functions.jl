@@ -97,7 +97,7 @@ function get_static_fmin(β::Real, u::Real, psamples_raw::Vector{NTuple{3, Float
 		κₚ′ = sqrt(γ′^2 + εₚ⁻′^2)
 		s -= wₚ*Float64(log((cosh(β′*κₚ′) + cosh(β′*εₚ⁺′))/(cosh(β′*εₚ⁻′) + cosh(β′*εₚ⁺′))))
 	end
-	return s
+	return γ, s
 end
 
 seed_sn(params::AbstractParams, rdisp::ReducedDispersion, Nₚ::Int64) = seed_sn(params, get_psamples(rdisp, Nₚ))
