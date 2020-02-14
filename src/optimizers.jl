@@ -67,13 +67,13 @@ function save_data(saver_o, P, Λ, static_fmin, m_opt, f_min, bs_opt, τs)
 end
 
 
-function get_optimum_fixed_m(m::Int64, β::Float64, Δτ::Float64, u, u₁, psamples, psamples_raw, opt::Optim.Options, γ)
+function get_optimum_fixed_m(m::Int64, β::Float64, Δτ::Float64, u, u₁, psamples, psamples_raw, opt::Optim.Options, ΔF₀)
 	t′ = -time()
     @info "Performing calculation for m = $m.\n"
 	N = 4*(div(ceil(Int64, β/(m*Δτ)), 4) + 1)
 	params = ParamsB1_pinned(N, m, β, u, u₁)
 	bs0 = seed_sn(params, psamples_raw)
-	d= construct_objective(params, psamples, γ, bs0)
+	d= construct_objective(params, psamples, ΔF₀, bs0)
 	results = optimize(d, bs0, LBFGS(m=20, linesearch = MoreThuente()), opt)
 	val = Optim.minimum(results)
 	bs = Optim.minimizer(results)
@@ -85,12 +85,13 @@ end
 function get_optimum(P::Float64, Λ::Float64, μ::Float64, α::Float64, Nₚ::Int64, β::Float64, Δτ::Float64, a::Float64, opt::Optim.Options)
 	rdisp = ReducedDispersion(α, P, μ, Λ)
 	psamples_raw = get_psamples(rdisp, Nₚ)
-	psamples = separate_psamples(psamples_raw)
 	u = get_u₀(β, psamples_raw)
 	u₁ = u*a
     γ, static_fmin = get_static_fmin(β, u, psamples_raw)
+	psamples = separate_psamples(widen(psamples_raw, Float128(β), γ))
+	ΔF₀ = β*u*γ^2
 	@info "Free energy of static configuration for this tuple is: $static_fmin.\n\n"
-	get_opt_for_m = (m)->get_optimum_fixed_m(m, β, Δτ, u, u₁, psamples, psamples_raw, opt, γ)
+	get_opt_for_m = (m)->get_optimum_fixed_m(m, β, Δτ, u, u₁, psamples, psamples_raw, opt, ΔF₀)
 	optimum, m_opt = FibonacciSearch(get_opt_for_m)
 	N_opt = 4*(div(ceil(Int64, β/(m_opt*Δτ)), 4) + 1)
     return static_fmin, m_opt, optimum.val, optimum.bs, get_τs(β, m_opt, N_opt)

@@ -178,11 +178,23 @@ function get_psamples(rdisp::ReducedDispersion, Nₚ)
 	return [(-rdisp.μ, rdisp.P + rdisp.Λ*ys[i], 2*rdisp.Λ*ws[i]/(rdisp.α*(2pi)^2)) for i in eachindex(ws)]
 end
 
-function separate_psamples(psamples_raw::Vector{NTuple{3,Float64}})
+function widen(psamples_raw::Vector{NTuple{3, Float64}}, β′::Float128, γ)
+	psamples_widened = Vector{Tuple{Float64, Float64, Float64, Float128, Float128}}()
+	for psample in psamples_raw
+		εₚ⁺′ = Float128(psample[1])
+		κₚ⁰ = sqrt(γ^2 + psample[2]^2)
+		a = cosh(β′*εₚ⁺′)
+		b = 1.0/(a + cosh(β′*κₚ⁰))
+		push!(psamples_widened, (psample..., a, b))
+	end
+	return psamples_widened
+end
+
+function separate_psamples(psamples_raw::Vector{Tuple{Float64,Float64,Float64, Float128, Float128}})
 	np = nprocs()
 	Nₚ = length(psamples_raw)
 	chunk_size, num_extra = divrem(Nₚ, np)
-	psamples = Vector{Vector{NTuple{3,Float64}}}(undef, np)
+	psamples = Vector{Vector{eltype(psamples_raw)}}(undef, np)
 	for cid = 0:(num_extra-1)
 		psamples[cid+1] = psamples_raw[((chunk_size+1)*cid+1):(chunk_size+1)*(cid+1)]
 	end

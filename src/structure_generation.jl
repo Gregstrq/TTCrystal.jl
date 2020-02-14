@@ -161,28 +161,24 @@ function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂²Fₚ::Abstrac
 	return Float64(log((cosh(β′*εₚ⁺) + 0.5*(λ₁′^m + λ₂′^m))/(cosh(β′*εₚ⁺)+cosh(β′*εₚ⁻))))
 end
 
-function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs::AbstractVector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ, γ)
+function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs::AbstractVector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ, a, b)
 	N₀, N, m, β = length(bs), params.N, params.m, params.β
 	U = compute_single_period!(∂U, U_cash, process_bs(bs, params), εₚ⁻, β/(N*m))
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
-	mFₚ⁻¹ = m/(2*cosh(β*εₚ⁺)/λ₁^m + 1.0 + (λ₂/λ₁)^m)
+	mFₚ⁻¹ = m/(2*a/λ₁^m + 1.0 + (λ₂/λ₁)^m)
 	for i = 1:N₀
 		∂Uⁱₛ = S⁻¹*∂U[i]*S
 		∂Fₚ[i] += wₚ*mFₚ⁻¹*(1/λ₁)*real(∂Uⁱₛ[1,1]+(λ₂/λ₁)^(m-1)*∂Uⁱₛ[2,2])
 	end
-	β′, λ₁′, λ₂′ = Float128(β), Float128(λ₁), Float128(λ₂)
-	κₚ⁰ = sqrt(γ^2 + εₚ⁻^2)
-	return wₚ*Float64(log((cosh(β′*εₚ⁺) + 0.5*(λ₁′^m + λ₂′^m))/(cosh(β′*εₚ⁺)+cosh(β′*κₚ⁰))))
+	return wₚ*Float64(log((a + 0.5*(λ₁^m + λ₂^m))*b))
 end
 
-function compute_full_span(bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ, γ)
+function compute_full_span(bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ, a, b)
 	β, m, N = params.β, params.m, params.N
 	Δτ = β/(m*N)
 	U = compute_ordered_exp(process_bs(bs, params), εₚ⁻, Δτ)
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
-	β′, λ₁′, λ₂′ = Float128(β), Float128(λ₁), Float128(λ₂)
-	κₚ⁰ = sqrt(γ^2 + εₚ⁻^2)
-	return wₚ*Float64(log((cosh(β′*εₚ⁺) + 0.5*(λ₁′^m + λ₂′^m))/(cosh(β′*εₚ⁺)+cosh(β′*κₚ⁰))))
+	return wₚ*Float64(log((a + 0.5*(λ₁^m + λ₂^m))*b))
 end
 
 ############################
@@ -205,19 +201,19 @@ function process_chunk!(∂F::SharedArray{Float64}, ∂²F::SharedArray{Float64}
 	return ΔF
 end
 
-function process_chunk!(∂F::AbstractVector{Float64}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs, params::AbstractParams, psamples::AbstractVector{NTuple{3, Float64}}, γ)
+function process_chunk!(∂F::AbstractVector{Float64}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs, params::AbstractParams, psamples::AbstractVector{Tuple{Float64, Float64, Float64, Float128, Float128}})
 	fill!(∂F, 0.0)
 	ΔF = zero(Float64)
 	for psample in psamples
-		ΔF += compute_full_span!(∂F, ∂U, U_cash, bs, params, psample..., γ)
+		ΔF += compute_full_span!(∂F, ∂U, U_cash, bs, params, psample...)
 	end
 	return ΔF
 end
 
-function process_chunk(bs::AbstractVector{Float64}, params::AbstractParams, psamples::AbstractVector{NTuple{3, Float64}}, γ)
+function process_chunk(bs::AbstractVector{Float64}, params::AbstractParams, psamples::AbstractVector{Tuple{Float64, Float64, Float64, Float128, Float128}})
 	ΔF = zero(Float64)
 	for psample in psamples
-		ΔF += compute_full_span(bs, params, psample..., γ)
+		ΔF += compute_full_span(bs, params, psample...)
 	end
 	return ΔF
 end
@@ -263,14 +259,14 @@ function precompute_step!(GH_storage::GH_Cash, bs, params::AbstractParams, psamp
 	return finalize!(∂Fs[1], ∂²Fs[1], ΔF, bs, params)
 end
 
-function precompute_step!(G_storage::G_Cash, bs, params::AbstractParams, psamples, γ)
+function precompute_step!(G_storage::G_Cash, bs, params::AbstractParams, psamples, ΔF₀)
 	∂Fs, ∂Us, U_cashes = G_storage.∂Fs, G_storage.∂Us, G_storage.U_cashes
 	fs = Vector{Future}(undef, nprocs())
     @sync begin
         for wid in true_workers()
-			fs[wid] = @spawnat wid process_chunk!(∂Fs[wid], localpart(∂Us), localpart(U_cashes), bs, params, psamples[wid], γ)
+			fs[wid] = @spawnat wid process_chunk!(∂Fs[wid], localpart(∂Us), localpart(U_cashes), bs, params, psamples[wid])
         end
-		fs[1] = @spawnat 1 process_chunk!(∂Fs[1], localpart(∂Us), localpart(U_cashes), bs, params, psamples[1], γ)
+		fs[1] = @spawnat 1 process_chunk!(∂Fs[1], localpart(∂Us), localpart(U_cashes), bs, params, psamples[1])
     end
 	ΔF = sum(fetch.(fs))
 	#print(typeof(∂Fs[2]), " ", length(∂Fs[2]), "\n")
@@ -278,10 +274,10 @@ function precompute_step!(G_storage::G_Cash, bs, params::AbstractParams, psample
 		∂Fs[1] .+= ∂Fs[wid]
 	end
 	β, u = params.β, params.u
-	return finalize!(∂Fs[1], ΔF + β*u*γ^2, bs, params)
+	return finalize!(∂Fs[1], ΔF + ΔF₀, bs, params)
 end
 
-function precompute_step(bs::AbstractVector{Float64}, params::AbstractParams, psamples)
+function precompute_step(bs::AbstractVector{Float64}, params::AbstractParams, psamples, ΔF₀)
 	fs = Vector{Future}(undef, nprocs())
     @sync begin
         for wid in true_workers()
@@ -291,7 +287,7 @@ function precompute_step(bs::AbstractVector{Float64}, params::AbstractParams, ps
     end
 	ΔF = sum(fetch.(fs))
 	β, u = params.β, params.u
-   	return finalize(ΔF + β*u*γ^2, bs, params)
+   	return finalize(ΔF + ΔF₀, bs, params)
 end
 
 
