@@ -3,7 +3,8 @@ module TTCrystal
 using Distributed, DistributedArrays, LinearAlgebra, SharedArrays, StaticArrays, Printf, OffsetArrays, Elliptic, Roots, NLSolversBase, Optim, Plots, Quadmath, GenericSchur, QuadGK, JLD2
 
 import InteractiveUtils: subtypes
-import LineSearches: MoreThuente
+using LineSearches
+#import LineSearches: MoreThuente
 import Base.Iterators: product
 import Base: ==, <, >, <=, >=
 
