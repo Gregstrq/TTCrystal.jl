@@ -1,7 +1,9 @@
+const TupType = Tuple{Float64, Float64, Float64, Float128, Float128}
+
 struct bfgsObjFunc{pType<:AbstractParams}
 	params::pType
 	g_cash::G_Cash
-	psamples::Vector{Vector{Tuple{Float64, Float64, Float64, Float128, Float128}}}
+    psamples::DArray{TupType, 1, Vector{TupType}}
 	ΔF₀::Float64
 end
 
@@ -28,7 +30,7 @@ function construct_objective(params::AbstractParams, rdisp::ReducedDispersion, N
 end
 
 
-function construct_objective(params::AbstractParams, psamples::Vector{Vector{Tuple{Float64, Float64, Float64, Float128, Float128}}}, ΔF₀, bs0)
+function construct_objective(params::AbstractParams, psamples::DArray{TupType, 1, Vector{TupType}}, ΔF₀, bs0)
     @assert get_length(params)==length(bs0)
 	fg! = bfgsObjFunc(params, G_Cash(params), psamples, ΔF₀)
     return OnceDifferentiable(only_fg!(fg!), bs0)

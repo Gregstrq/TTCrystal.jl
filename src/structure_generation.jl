@@ -264,9 +264,9 @@ function precompute_step!(G_storage::G_Cash, bs, params::AbstractParams, psample
 	fs = Vector{Future}(undef, nprocs())
     @sync begin
         for wid in true_workers()
-			fs[wid] = @spawnat wid process_chunk!(∂Fs[wid], localpart(∂Us), localpart(U_cashes), bs, params, psamples[wid])
+            fs[wid] = @spawnat wid process_chunk!(∂Fs[wid], localpart(∂Us), localpart(U_cashes), bs, params, localpart(psamples))
         end
-		fs[1] = @spawnat 1 process_chunk!(∂Fs[1], localpart(∂Us), localpart(U_cashes), bs, params, psamples[1])
+        fs[1] = @spawnat 1 process_chunk!(∂Fs[1], localpart(∂Us), localpart(U_cashes), bs, params, localpart(psamples))
     end
 	ΔF = sum(fetch.(fs))
 	#print(typeof(∂Fs[2]), " ", length(∂Fs[2]), "\n")
@@ -281,9 +281,9 @@ function precompute_step(bs::AbstractVector{Float64}, params::AbstractParams, ps
 	fs = Vector{Future}(undef, nprocs())
     @sync begin
         for wid in true_workers()
-			fs[wid] = @spawnat wid process_chunk(bs, params, psamples[wid])
+			fs[wid] = @spawnat wid process_chunk(bs, params, localpart(psamples))
         end
-		fs[1] = @spawnat 1 process_chunk(bs, params, psamples[1])
+		fs[1] = @spawnat 1 process_chunk(bs, params, localpart(psamples))
     end
 	ΔF = sum(fetch.(fs))
 	β, u = params.β, params.u

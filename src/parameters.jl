@@ -190,7 +190,7 @@ function widen(psamples_raw::Vector{NTuple{3, Float64}}, β′::Float128, γ)
 	return psamples_widened
 end
 
-function separate_psamples(psamples_raw::Vector{Tuple{Float64,Float64,Float64, Float128, Float128}})
+function separate_psamples_old(psamples_raw::Vector{Tuple{Float64,Float64,Float64, Float128, Float128}})
 	np = nprocs()
 	Nₚ = length(psamples_raw)
 	chunk_size, num_extra = divrem(Nₚ, np)
@@ -204,6 +204,8 @@ function separate_psamples(psamples_raw::Vector{Tuple{Float64,Float64,Float64, F
 	end
 	return psamples
 end
+
+separate_psamples(psamples_raw::AbstractVector) = distribute(psamples_raw; procs = procs())
 
 function generate_psamples(rdisp::ReducedDispersion, Nₚ)
 	return separate_psamples(get_psamples(rdisp, Nₚ))
