@@ -13,6 +13,14 @@ struct ParamsB1 <: AbstractParamsB1
     u₁::Float64
 end
 
+struct ParamsB1B3 <: AbstractParamsB1
+    N::Int64
+    m::Int64
+    β::Float64
+    u::Float64
+    u₁::Float64
+end
+
 struct ParamsB1_pinned <: AbstractParamsB1
     N::Int64
     m::Int64
@@ -79,7 +87,7 @@ for Params_constr in Symbol.(subtypes(AbstractParamsNoB1))
 	end
 end
 
-get_pinned_idxs(params::Union{ParamsNoB1, ParamsB1}) = Int64[]
+get_pinned_idxs(params::Union{ParamsNoB1, ParamsB1, ParamsB1B3}) = Int64[]
 get_pinned_idxs(params::Union{ParamsB1_pinned, ParamsNoB1_pinned}) = [1, params.i_pinned]
 function get_pinned_idxs(params::Union{ParamsB1_pinned²})
     N, i_pinned = params.N, params.i_pinned
@@ -89,7 +97,7 @@ end
 get_free_idxs(params::AbstractParams) = [i for i=Base.OneTo(get_length(params)) if !(i in get_pinned_idxs(params))]
 
 @inline pin_bs!(bs::AbstractVector, params::AbstractParams) = pin_bs!(bs, get_pinned_idxs(params))
-@inline pin_bs!(bs::AbstractVector, params::Union{ParamsB1, ParamsNoB1}) = bs
+@inline pin_bs!(bs::AbstractVector, params::Union{ParamsB1, ParamsB1B3, ParamsNoB1}) = bs
 function pin_bs!(bs::AbstractVector{T}, pinned_idxs::Vector{Int64}) where {T}
     for i in pinned_idxs
         bs[i] = zero(T)
@@ -98,7 +106,7 @@ function pin_bs!(bs::AbstractVector{T}, pinned_idxs::Vector{Int64}) where {T}
 end
 
 @inline project_onto(a, params::AbstractParams) = project_onto(a, get_free_idxs(params))
-@inline project_onto(a, params::Union{ParamsB1, ParamsNoB1}) = a
+@inline project_onto(a, params::Union{ParamsB1, ParamsB1B3, ParamsNoB1}) = a
 @inline project_onto(a::AbstractVector, free_idxs::Vector{Int64}) = view(a, free_idxs)
 @inline project_onto(a::AbstractMatrix, free_idxs::Vector{Int64}) = view(a, free_idxs)
 
@@ -113,6 +121,7 @@ generate_cash(::NewtonOptAlg, params::AbstractParams) = GH_Cash(params)
 generate_cash(::BFGSOptAlg, params::AbstractParams) = G_Cash(params)
 
 get_length(params::AbstractParamsB1) = 2params.N
+get_length(params::ParamsB1B3) = 3params.N
 get_length(params::AbstractParamsNoB1) = params.N
 
 struct GH_Cash <: AbstractSharedCash

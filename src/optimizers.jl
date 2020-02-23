@@ -77,7 +77,7 @@ function get_optimum_fixed_m(m::Int64, β::Float64, Δτ::Float64, u, u₁, psam
 	t′ = -time()
     @info "Performing calculation for m = $m.\n"
 	N = 4*(div(ceil(Int64, β/(m*Δτ)), 4) + 1)
-	params = ParamsB1_pinned(N, m, β, u, u₁)
+	params = ParamsB1B3(N, m, β, u, u₁)
 	bs0 = seed_sn(params, psamples_raw)
 	d= construct_objective(params, psamples, ΔF₀, bs0)
 	results = optimize(d, bs0, LBFGS(m=120, linesearch = MoreThuente()), opt)

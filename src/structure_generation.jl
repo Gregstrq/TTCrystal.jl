@@ -86,6 +86,22 @@ function compute_single_period!(∂U::AbstractVector{SMatrix{2,2, Complex{Float1
 	return U_cash[1]
 end
 
+function compute_single_period!(∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs::NTuple{3, AbstractVector{Float64}}, εₚ⁻, Δτ)
+	N = length(bs[1])
+	∂₀U = @view ∂U[1:N]
+	∂₁U = @view ∂U[(N+1):2N]
+	∂₃U = @view ∂U[(2N+1):3N]
+	compute_U_cash!(U_cash, bs, εₚ⁻, Δτ)
+	Mb = one(SMatrix{2,2, Complex{Float128}})
+	for i = 1:N
+		∂₀U[i] = U_cash[i+1]*B′₀(bs, i, εₚ⁻, Δτ)*Mb
+		∂₁U[i] = U_cash[i+1]*B′₁(bs, i, εₚ⁻, Δτ)*Mb
+		∂₃U[i] = U_cash[i+1]*B′₃(bs, i, εₚ⁻, Δτ)*Mb
+		Mb = B(bs, i, εₚ⁻, Δτ)*Mb
+	end
+	return U_cash[1]
+end
+
 function compute_single_period!(∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs::NTuple{2, AbstractVector{Float64}}, εₚ⁻, Δτ)
 	N = length(bs[1])
 	∂₀U = @view ∂U[1:N]
@@ -115,6 +131,8 @@ end
 
 process_bs(bs, params::AbstractParamsNoB1) = (bs,)
 process_bs(bs, params::AbstractParamsB1) = (bs[1:params.N], bs[(params.N+1):2params.N])
+process_bs(bs, params::AbstractParamsB1) = (view(bs, 1:params.N), view(bs,(params.N+1):2params.N))
+process_bs(bs, params::ParamsB1B3) = (view(bs, 1:params.N), view(bs, (params.N+1):2params.N), view(bs, (2params.N+1):3params.N))
 
 function custom_eigen(U::SMatrix{2,2, Complex{T}}) where {T<:Real}
 	eigvals, eigvecs = eigen(Matrix(U))
@@ -326,6 +344,29 @@ function finalize(ΔF, bs, params::AbstractParamsB1)
 	N, m, β, u, u₁ = params.N, params.m, params.β, params.u, params.u₁
 	mΔτ = β/N
 	return mΔτ*(u*sum(abs2, bs[1:N]) + u₁*sum(abs2, bs[(N+1):2N])) - ΔF
+end
+
+function finalize!(∂F, ΔF, bs, params::ParamsB1B3)
+	N, m, β, u, u₁ = params.N, params.m, params.β, params.u, params.u₁
+	mΔτ = β/N
+    ΔF = mΔτ*(u*sum(abs2, view(bs, 1:N)) + u₁*sum(abs2, view(bs, (N+1):2N)) + u*sum(abs2, view(bs, (2N+1):3N))) - ΔF
+	∂F .*= -1.0
+	for i = 1:N
+		∂F[i] += 2mΔτ*u*bs[i]
+	end
+	for i = (N+1):2N
+		∂F[i] += 2mΔτ*u₁*bs[i]
+	end
+    for i = (2N+1):3N
+		∂F[i] += 2mΔτ*u*bs[i]
+	end
+    return ΔF, pin_bs!(∂F, params)
+end
+
+function finalize(ΔF, bs, params::AbstractParamsB1)
+	N, m, β, u, u₁ = params.N, params.m, params.β, params.u, params.u₁
+	mΔτ = β/N
+    return mΔτ*(u*(sum(abs2, view(bs, 1:N)) + sum(abs2, view(bs, (2N+1):3N))) + u₁*sum(abs2, view(bs, (N+1):2N))) - ΔF
 end
 
 function finalize!(∂F, ∂²F, ΔF, bs, params::AbstractParamsNoB1)
