@@ -60,12 +60,18 @@ end
 
 
 function save_data(saver_o, P, Λ, static_fmin, m_opt, f_min, bs_opt, τs)
-    jldopen("dset_$(saver_o.iter).jld2", "w") do file
+	jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
         @stash!(file, P, Λ, static_fmin, m_opt, f_min, bs_opt, τs)
     end
     saver_o.iter += 1
 end
 
+function save_data(saver_o, P, Λ, μ, α, Nₚ, β, Δτ, a, opt, static_f_min, m_opt, f_min, bs_opt, τs)
+    jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
+        @stash!(file, P, Λ, μ, α, Nₚ, β, Δτ, a, opt, static_f_min, m_opt, f_min, bs_opt, τs)
+    end
+    saver_o.iter += 1
+end
 
 function get_optimum_fixed_m(m::Int64, β::Float64, Δτ::Float64, u, u₁, psamples, psamples_raw, opt::Optim.Options, ΔF₀)
 	t′ = -time()
@@ -74,7 +80,23 @@ function get_optimum_fixed_m(m::Int64, β::Float64, Δτ::Float64, u, u₁, psam
 	params = ParamsB1_pinned(N, m, β, u, u₁)
 	bs0 = seed_sn(params, psamples_raw)
 	d= construct_objective(params, psamples, ΔF₀, bs0)
-	results = optimize(d, bs0, LBFGS(m=220, linesearch = MoreThuente()), opt)
+	results = optimize(d, bs0, LBFGS(m=120, linesearch = MoreThuente()), opt)
+    #results = optimize(d, bs0, ConjugateGradient(), opt)
+	val = Optim.minimum(results)
+	bs = Optim.minimizer(results)
+	t′ += time()
+	@info "This calculation took $t′ s.\nCorresponding free energy is: $val.\n\n" 
+	return LocalExtremum(val, bs)
+end
+
+function get_optimum_fixed_mi_nob1(m::Int64, β::Float64, Δτ::Float64, u, psamples, psamples_raw, opt::Optim.Options, ΔF₀)
+	t′ = -time()
+    @info "No B1. Performing calculation for m = $m.\n"
+	N = 4*(div(ceil(Int64, β/(m*Δτ)), 4) + 1)
+	params = ParamsNoB1(N, m, β, u)
+	bs0 = seed_sn(params, psamples_raw)
+	d= construct_objective(params, psamples, ΔF₀, bs0)
+	results = optimize(d, bs0, LBFGS(m=120, linesearch = MoreThuente()), opt)
     #results = optimize(d, bs0, ConjugateGradient(), opt)
 	val = Optim.minimum(results)
 	bs = Optim.minimizer(results)
