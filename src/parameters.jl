@@ -21,6 +21,14 @@ struct ParamsB1B3 <: AbstractParamsB1
     u₁::Float64
 end
 
+struct ParamsB3 <: AbstractParamsB1
+    N::Int64
+    m::Int64
+    β::Float64
+    u::Float64
+	u₁::Float64
+end
+
 struct ParamsB1_pinned <: AbstractParamsB1
     N::Int64
     m::Int64
@@ -89,6 +97,7 @@ end
 
 get_pinned_idxs(params::Union{ParamsNoB1, ParamsB1, ParamsB1B3}) = Int64[]
 get_pinned_idxs(params::Union{ParamsB1_pinned, ParamsNoB1_pinned}) = [1, params.i_pinned]
+get_pinned_idxs(params::ParamsB3) = (N = params.N; collect((N+1):2N))
 function get_pinned_idxs(params::Union{ParamsB1_pinned²})
     N, i_pinned = params.N, params.i_pinned
     return [1, i_pinned, N+div(N,4)+1, N+div(N,4)+i_pinned]
@@ -121,7 +130,7 @@ generate_cash(::NewtonOptAlg, params::AbstractParams) = GH_Cash(params)
 generate_cash(::BFGSOptAlg, params::AbstractParams) = G_Cash(params)
 
 get_length(params::AbstractParamsB1) = 2params.N
-get_length(params::ParamsB1B3) = 3params.N
+get_length(params::Union{ParamsB3, ParamsB1B3}) = 3params.N
 get_length(params::AbstractParamsNoB1) = params.N
 
 struct GH_Cash <: AbstractSharedCash

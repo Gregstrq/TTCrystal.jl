@@ -132,6 +132,15 @@ function seed_const(c1, c2, params::AbstractParamsB1)
     return bs
 end
 
+function seed_const(c1, c2, c3, params::Union{ParamsB1B3, ParamsB3})
+    N = params.N
+	bs = Vector{Float64}(undef, get_length(params))
+    bs[1:N] .= c1
+    bs[(N+1):2N] .= c2
+	bs[(2N+1):3N] .= c3
+    return bs
+end
+
 ################################
 
 isB1(params::AbstractParamsB1) = Val(true)
@@ -151,6 +160,7 @@ function show_bs(res::Optim.MultivariateOptimizationResults, ::Val{false})
 end
 
 show_bs(res, params::AbstractParams) = show_bs(res, isB1(params))
+
 
 function check_derivative(bs)
     N = div(length(bs), 2)
