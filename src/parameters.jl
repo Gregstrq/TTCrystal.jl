@@ -1,6 +1,7 @@
 abstract type AbstractParams end
 abstract type AbstractParamsB1 <: AbstractParams end
 abstract type AbstractParamsNoB1 <: AbstractParams end
+abstract type AbstractParamsB1B3 <: AbstractParamsB1 end
 
 abstract type AbstractDispersion end
 abstract type AbstractSharedCash end
@@ -13,7 +14,7 @@ struct ParamsB1 <: AbstractParamsB1
     u₁::Float64
 end
 
-struct ParamsB1B3 <: AbstractParamsB1
+struct ParamsB1B3 <: AbstractParamsB1B3
     N::Int64
     m::Int64
     β::Float64
@@ -21,7 +22,7 @@ struct ParamsB1B3 <: AbstractParamsB1
     u₁::Float64
 end
 
-struct ParamsB3 <: AbstractParamsB1
+struct ParamsB3 <: AbstractParamsB1B3
     N::Int64
     m::Int64
     β::Float64
@@ -106,11 +107,18 @@ end
 get_free_idxs(params::AbstractParams) = [i for i=Base.OneTo(get_length(params)) if !(i in get_pinned_idxs(params))]
 
 @inline pin_bs!(bs::AbstractVector, params::AbstractParams) = pin_bs!(bs, get_pinned_idxs(params))
-@inline pin_bs!(bs::AbstractVector, params::Union{ParamsB1, ParamsB1B3, ParamsNoB1}) = bs
+@inline pin_bs!(bs::AbstractVector, params::Union{ParamsB1, ParamsNoB1}) = bs
 function pin_bs!(bs::AbstractVector{T}, pinned_idxs::Vector{Int64}) where {T}
     for i in pinned_idxs
         bs[i] = zero(T)
     end
+    return bs
+end
+
+function pin_bs!(bs::AbstractVector, params::AbstractParamsB1B3)
+    N = params.N
+    bs[[1, div(N,2)+1]] .= 0.0
+    #bs[(2N+1):3N] .-= sum(view(bs, (2N+1):3N))/N
     return bs
 end
 

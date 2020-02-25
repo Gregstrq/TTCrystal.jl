@@ -178,3 +178,44 @@ function check_derivative(bs)
     plot!(b1)
 end
 check_derivative(res::Optim.MultivariateOptimizationResults) = check_derivative(Optim.minimizer(res))
+
+################################
+
+function el_part(γ, P, β, psamples_raw)
+	β′ = Float128(β)
+    γ′ = Float128(γ)
+    s = 0.0
+	for (εₚ⁺, εₚ⁻, wₚ) in psamples_raw
+		εₚ⁻′ = Float128(εₚ⁻)
+		εₚ⁺′ = Float128(εₚ⁺)
+        κₚ′ = sqrt(γ′^2 + (εₚ⁻′ - P)^2)
+		s += wₚ*Float64(log((cosh(β′*κₚ′) + cosh(β′*εₚ⁺′))/(cosh(β′*εₚ⁻′) + cosh(β′*εₚ⁺′))))
+	end
+    return s
+end
+
+function static_f_energy(γ, P, β, u, psamples_raw)
+    β*u*(γ^2 + P^2) - el_part(γ, P, β, psamples_raw)
+end
+
+function energy_grad!(g, v, β, u, psamples_raw)
+    γ, P = v[1], v[2]
+    g[1] = 2*β*u*γ
+    g[2] = 2*β*u*P
+    s = 0.0
+    s1 = 0.0
+	for (εₚ⁺, εₚ⁻, wₚ) in psamples_raw
+        κₚ = sqrt(γ^2 + (εₚ⁻-P)^2)
+        s += wₚ*(tanh(0.5*β*(κₚ+εₚ⁺)) + tanh(0.5*β*(κₚ-εₚ⁺)))/κₚ
+        s1 += wₚ*(εₚ⁻-P)*(tanh(0.5*β*(κₚ+εₚ⁺)) + tanh(0.5*β*(κₚ-εₚ⁺)))/κₚ
+    end
+    g[1] -= β*0.5*γ*s
+    g[2] += β*0.5*s1
+end
+
+function optimize_γ_P(γ₀, P₀, β, u, psamples_raw)
+    f(v) = static_f_energy(v[1], v[2], β, u, psamples_raw)
+    g!(g, v) = energy_grad!(g, v, β, u, psamples_raw)
+    x0 = [γ₀, P₀]
+    return optimize(f, g!, x0, Optim.Options(g_tol = 1e-10, show_trace = true))
+end
