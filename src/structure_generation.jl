@@ -227,6 +227,17 @@ function process_chunk!(∂F::AbstractVector{Float64}, ∂U::AbstractVector{SMat
 	return ΔF
 end
 
+
+function process_chunk2!(∂F::AbstractVector{SharedVector{Float64}}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs, params::AbstractParams, psamples::AbstractVector{Tuple{Float64, Float64, Float64, Float128, Float128}})
+	ΔF = zero(Float64)
+    for i in eachindex(psamples)
+        psample = psamples[i]
+        fill!(∂F[i], 0.0)
+        ΔF += compute_full_span!(∂F[i], ∂U, U_cash, bs, params, psample...)
+	end
+	return ΔF
+end
+
 function process_chunk(bs::AbstractVector{Float64}, params::AbstractParams, psamples::AbstractVector{Tuple{Float64, Float64, Float64, Float128, Float128}})
 	ΔF = zero(Float64)
 	for psample in psamples
@@ -290,8 +301,20 @@ function precompute_step!(G_storage::G_Cash, bs, params::AbstractParams, psample
     for wid in true_workers()
 		∂Fs[1] .+= ∂Fs[wid]
 	end
-	β, u = params.β, params.u
 	return finalize!(∂Fs[1], ΔF + ΔF₀, bs, params)
+end
+
+function compute_grad_components!(G_storage::G_Cash2, bs, params::AbstractParams, psamples)
+	∂Fs, ∂Us, U_cashes = G_storage.∂Fs, G_storage.∂Us, G_storage.U_cashes
+    ranges = [@fetchfrom wid DistributedArrays.localindices(psamples)[1] for wid in procs()]
+    show(ranges)
+    @sync begin
+        for wid in true_workers()
+            @spawnat wid process_chunk2!(view(∂Fs, ranges[wid]), localpart(∂Us), localpart(U_cashes), bs, params, localpart(psamples))
+        end
+        @spawnat 1 process_chunk2!(view(∂Fs, ranges[1]), localpart(∂Us), localpart(U_cashes), bs, params, localpart(psamples))
+    end
+	return ∂Fs
 end
 
 function precompute_step(bs::AbstractVector{Float64}, params::AbstractParams, psamples, ΔF₀)
@@ -303,7 +326,6 @@ function precompute_step(bs::AbstractVector{Float64}, params::AbstractParams, ps
 		fs[1] = @spawnat 1 process_chunk(bs, params, localpart(psamples))
     end
 	ΔF = sum(fetch.(fs))
-	β, u = params.β, params.u
    	return finalize(ΔF + ΔF₀, bs, params)
 end
 

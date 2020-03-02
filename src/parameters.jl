@@ -172,6 +172,23 @@ mutable struct G_Cash <: AbstractSharedCash
 	end
 end
 
+mutable struct G_Cash2 <: AbstractSharedCash
+	∂Fs::Vector{SharedVector{Float64}}
+	∂Us::DArray{SMatrix{2,2,Complex{Float128}}, 1, Vector{SMatrix{2,2,Complex{Float128}}}}
+	U_cashes::DArray{SMatrix{2,2,Complex{Float128}}, 1, Vector{SMatrix{2,2,Complex{Float128}}}}
+	function G_Cash2(params::AbstractParams, Nₚ)
+		np = nprocs()
+		N = params.N
+		N′ = get_length(params)
+        ∂Fs = [SharedVector{Float64}(N′) for i=1:Nₚ]
+		∂Us = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float128}}, N′) for i=procs()])
+		U_cashes = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float128}}, N+1) for i=procs()])
+		g_cash = new(∂Fs, ∂Us, U_cashes)
+		finalizer(free_darrays, g_cash)
+		return g_cash
+	end
+end
+
 function free_darrays(g_cash::G_Cash)
 	close(g_cash.∂Us)
 	close(g_cash.U_cashes)
