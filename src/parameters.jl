@@ -203,6 +203,7 @@ struct ReducedDispersion <: AbstractDispersion
     Λ::Float64
 end
 
+
 wfunc(y::Float64) = y==0.0 ? 0.0 : y^2*log((1+sqrt(1-y^6))/abs(y)^3)
 wfunc_gauss(y::Real) = log((1+sqrt(1-y^2))/abs(y))
 
@@ -252,4 +253,41 @@ separate_psamples(psamples_raw::AbstractVector) = distribute(psamples_raw; procs
 
 function generate_psamples(rdisp::ReducedDispersion, Nₚ)
 	return separate_psamples(get_psamples(rdisp, Nₚ))
+end
+
+struct Dispersion <:AbstractDispersion
+	α::Float64
+	α′::Float64
+	μ::Float64
+	Λ::Float64
+	P::Float64
+end
+Dispersion(α, α′, μ, Λ) = Dispersion(α, α′, μ, Λ, 0.0)
+
+wfunc_φ(φ) = 1/sqrt(1-φ^2)
+
+macro unpack(var, args...)
+	exs = [:($arg = $(esc(var)).$arg) for arg in args]
+    return Expr(:block, exs...)
+end
+
+function get_psamples(disp::Dispersion, Nₜ, Nᵩ)
+	#@unpack disp α α′ μ Λ P
+	α, α′, μ, Λ, P = disp.α, disp.α′, disp.μ, disp.Λ, disp.P
+	φs, wᵩs = gauss(wfunc_φ, Nᵩ, -1.0, 1.0)
+	ts, wₜs = gauss(Nₜ, 0.0, 1.0)
+	c1 = 4*Λ/((α + α′)*(2π)^2) 
+	c2 = (α - α′)/(α + α′)*Λ
+	psamples_raw = Vector{NTuple{3, Float64}}()
+	for iₜ = 1:length(ts)
+		t = ts[iₜ]
+		wₜ = wₜs[iₜ]
+		εₚ⁺ = c2*t - μ
+		for iᵩ = 1:length(φs)
+			wₚ = c1*wₜ*wᵩs[iᵩ]
+			εₚ⁻ = Λ*t*φs[iᵩ] + P
+			push!(psamples_raw, (εₚ⁺, εₚ⁻, wₚ))
+		end
+	end
+	return psamples_raw
 end

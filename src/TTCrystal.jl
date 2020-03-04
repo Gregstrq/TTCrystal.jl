@@ -19,11 +19,14 @@ include("optimizers.jl")
 include("ctime_gfuncs.jl")
 #include("interface.jl")
 
-export ParamsB1, ParamsB1_pinned, ParamsNoB1, ParamsNoB1_pinned, ReducedDispersion, Saver
+export ParamsB1, ParamsB1_pinned, ParamsNoB1, ParamsNoB1_pinned, ReducedDispersion, Dispersion, Saver
 export generate_shared_cash, generate_psamples
-export isB1, output, save_data, log_data, seek_minimum, newton_step!, precompute_newton_step!, finalize!
+export G_Cash
+export precompute_step!, precompute_step
+export isB1, output, save_data, log_data, finalize!, finalize
 export B, B′₀, B′₁, B′′₀₀, B′′₁₁, B′′₀₁
 export bfgsObjFunc
+export @unpack
 
     
 end # module
