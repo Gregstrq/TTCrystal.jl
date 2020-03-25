@@ -194,14 +194,14 @@ function el_part(γ, P, β, psamples_raw)
     return s
 end
 
-function static_f_energy(γ, P, β, u, psamples_raw)
-    β*u*(γ^2 + P^2) - el_part(γ, P, β, psamples_raw)
+function static_f_energy(γ, P, β, u, u₃, psamples_raw)
+    β*(u*γ^2 + u₃*P^2) - el_part(γ, P, β, psamples_raw)
 end
 
-function energy_grad!(g, v, β, u, psamples_raw)
+function energy_grad!(g, v, β, u, u₃, psamples_raw)
     γ, P = v[1], v[2]
     g[1] = 2*β*u*γ
-    g[2] = 2*β*u*P
+    g[2] = 2*β*u₃*P
     s = 0.0
     s1 = 0.0
 	for (εₚ⁺, εₚ⁻, wₚ) in psamples_raw
@@ -213,9 +213,9 @@ function energy_grad!(g, v, β, u, psamples_raw)
     g[2] += β*0.5*s1
 end
 
-function optimize_γ_P(γ₀, P₀, β, u, psamples_raw)
-    f(v) = static_f_energy(v[1], v[2], β, u, psamples_raw)
-    g!(g, v) = energy_grad!(g, v, β, u, psamples_raw)
+function optimize_γ_P(γ₀, P₀, β, u, u₃, psamples_raw)
+    f(v) = static_f_energy(v[1], v[2], β, u, u₃, psamples_raw)
+    g!(g, v) = energy_grad!(g, v, β, u, u₃, psamples_raw)
     x0 = [γ₀, P₀]
     return optimize(f, g!, x0, Optim.Options(g_tol = 1e-10, show_trace = true))
 end

@@ -4,6 +4,7 @@ authors = ["Grigory Starkov <mozgolom92@gmail.com>"]
 version = "0.1.0"
 
 [deps]
+CustomQuad = "ff53470e-adab-4fc1-b282-56faa5a21516"
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 DistributedArrays = "aaf54ef3-cdf8-58ed-94cc-d582ad619b94"
 Elliptic = "b305315f-e792-5b7a-8f41-49f472929428"

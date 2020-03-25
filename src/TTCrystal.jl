@@ -2,6 +2,8 @@ module TTCrystal
 
 using Distributed, DistributedArrays, LinearAlgebra, SharedArrays, StaticArrays, Printf, OffsetArrays, Elliptic, Roots, NLSolversBase, Optim, Plots, Quadmath, GenericSchur, QuadGK, JLD2
 
+using CustomQuad
+
 import InteractiveUtils: subtypes
 using LineSearches
 #import LineSearches: MoreThuente
@@ -20,9 +22,12 @@ include("ctime_gfuncs.jl")
 #include("interface.jl")
 
 export ParamsB1, ParamsB1_pinned, ParamsNoB1, ParamsNoB1_pinned, ReducedDispersion, Dispersion, Saver
-export generate_shared_cash, generate_psamples
-export G_Cash
-export precompute_step!, precompute_step
+export get_u₀, get_psamples, widen
+export generate_shared_cash, generate_psamples, get_psamples, get_psamples_old, get_psamples_new
+export construct_objective, process_bs
+export G_Cash, G_Cash2
+export compute_single_period!, compute_full_span!
+export precompute_step!, precompute_step, compute_grad_components!
 export isB1, output, save_data, log_data, finalize!, finalize
 export B, B′₀, B′₁, B′′₀₀, B′′₁₁, B′′₀₁
 export bfgsObjFunc

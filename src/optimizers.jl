@@ -159,3 +159,90 @@ function process_stacktrace(st)
 	end
 	return str
 end
+
+#########################################################
+
+function get_optimum2(P::Float64, Λ::Float64, μ::Float64, α::Float64, β::Float64, Δτ::Float64, a::Float64, opt::Optim.Options, int_rtol::Float64=1e-6, limits::Int64 = 200)
+	rdisp = ReducedDispersion(α, P, μ, Λ)
+	psamples_raw = get_psamples(rdisp, int_rtol, limits)
+	Nₚ = length(psamples_raw)
+	@info "Number of ε⁻ points is: $Nₚ.\n\n"
+	u = get_u₀(β, psamples_raw)
+	u₁ = u*a
+    γ, static_fmin = get_static_fmin(β, u, psamples_raw)
+	@info "Free energy of static configuration for this tuple is: $static_fmin.\n\n"
+	psamples = separate_psamples(widen(psamples_raw, Float128(β), γ))
+	ΔF₀ = β*u*γ^2
+	m = 1
+	N = 4*(div(ceil(Int64, β/(m*Δτ)), 4) + 1)
+	params0 = ParamsNoB1(N, m, β, u)
+	params = ParamsB1(N, m, β, u, u₁)
+	####
+	t′ = -time()
+	bs0 = seed_sn(params0, psamples_raw)
+	d0 = construct_objective(params0, psamples, ΔF₀, bs0)
+	results0 = optimize(d0, bs0, LBFGS(m=120, linesearch = LineSearches.MoreThuente()), opt)
+	f_seed = Optim.minimum(results0)
+	bs_seed = Optim.minimizer(results0)
+	bs_seed′ = vcat(bs_seed, fill!(similar(bs_seed), 0.0))
+	t′ += time()
+	@info "Free energy of seed configuration is $f_seed. Calculation took $t′ s.\n\n"
+	####
+	t′ = -time()
+	d = construct_objective(params, psamples, ΔF₀, bs_seed′)
+	results = optimize(d, bs_seed′, LBFGS(m=120, linesearch = LineSearches.MoreThuente()), opt)
+	f_final = Optim.minimum(results)
+	bs_final = Optim.minimizer(results)
+	t′ += time()
+	@info "Free energy of final configuration is $f_final. Calculation took $t′ s.\n\n"
+    return static_fmin, f_seed, bs_seed, f_final, bs_final, get_τs(β, 1, N)
+end
+
+
+function params_walkthrough2(P_range::AbstractRange, Λ_range::AbstractRange, saver_o::Saver, μ::Float64, α::Float64, β::Float64, Δτ::Float64, a::Float64, opt::Optim.Options, int_rtol::Float64 = 1e-6, limits::Int64 = 200)
+	tups = reshape([tup for tup in product(P_range, Λ_range)], length(P_range)*length(Λ_range))
+    N_tot = length(tups)
+    t0 = time()
+    for i in eachindex(tups)
+        t1 = time()
+        (P, Λ) = tups[i]
+        @info "I am currently dealing with $i-th tuple of (P, Λ), which is (P, Λ) = ($P, $Λ).\n\n"
+        try
+		    static_f_min, f_seed, bs_seed, f_final, bs_final, τs = get_optimum2(P, Λ, μ, α, β, Δτ, a, opt, int_rtol, limits)
+			jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
+				@stash!(file, P, Λ, μ, α, β, Δτ, a, opt, int_rtol, limits, static_f_min, f_seed, bs_seed, f_final, bs_final, τs)
+			end
+			saver_o.iter += 1
+        catch ex
+			stacktrace_string = catch_backtrace() |> stacktrace |> process_stacktrace
+			@error "This Error occured for $i-th tuple of (P, Λ), which is (P, Λ) = ($P, $Λ).\n $ex\n$stacktrace_string\n\n"
+			static_f_min, f_seed, bs_seed, f_final, bs_final, τs = missing, missing, missing, missing, missing, missing
+			jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
+				@stash!(file, P, Λ, μ, α, β, Δτ, a, opt, int_rtol, limits, static_f_min, f_seed, bs_seed, f_final, bs_final, τs)
+			end
+			saver_o.iter += 1
+        end
+        t2 = time()
+        @info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (P, Λ) = ($P, $Λ). This run took $(t2-t1) s.\n\n\n\n"
+	end
+end
+
+function params_walkthrough3(P_range::AbstractRange, Λ_range::AbstractRange, saver_o::Saver, μ::Float64, α::Float64, β::Float64, Δτ::Float64, a::Float64, opt::Optim.Options, int_rtol::Float64 = 1e-6, limits::Int64 = 200)
+	tups = reshape([tup for tup in product(P_range, Λ_range)], length(P_range)*length(Λ_range))
+    N_tot = length(tups)
+    t0 = time()
+    for i in eachindex(tups)
+        t1 = time()
+        (P, Λ) = tups[i]
+        @info "I am currently dealing with $i-th tuple of (P, Λ), which is (P, Λ) = ($P, $Λ).\n\n"
+		static_f_min, f_seed, bs_seed, f_final, bs_final, τs = get_optimum2(P, Λ, μ, α, β, Δτ, a, opt, int_rtol, limits)
+		jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
+			@stash!(file, P, Λ, μ, α, β, Δτ, a, opt, int_rtol, limits, static_f_min, f_seed, bs_seed, f_final, bs_final, τs)
+		end
+		saver_o.iter += 1
+        t2 = time()
+        @info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (P, Λ) = ($P, $Λ). This run took $(t2-t1) s.\n\n\n\n"
+	end
+end
+
+

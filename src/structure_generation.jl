@@ -187,7 +187,7 @@ function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂U::AbstractVect
 		∂Uⁱₛ = S⁻¹*∂U[i]*S
 		∂Fₚ[i] += wₚ*mFₚ⁻¹*(1/λ₁)*real(∂Uⁱₛ[1,1]+(λ₂/λ₁)^(m-1)*∂Uⁱₛ[2,2])
 	end
-	return wₚ*Float64(log((a + 0.5*(λ₁^m + λ₂^m))*b))
+	return wₚ*Float64(log(abs(a + 0.5*(λ₁^m + λ₂^m)))-b)
 end
 
 function compute_full_span(bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ, a, b)
@@ -195,7 +195,7 @@ function compute_full_span(bs::Vector{Float64}, params::AbstractParams, εₚ⁺
 	Δτ = β/(m*N)
 	U = compute_ordered_exp(process_bs(bs, params), εₚ⁻, Δτ)
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
-	return wₚ*Float64(log((a + 0.5*(λ₁^m + λ₂^m))*b))
+	return wₚ*Float64(log(abs(a + 0.5*(λ₁^m + λ₂^m)))-b)
 end
 
 ############################
@@ -368,9 +368,9 @@ function finalize(ΔF, bs, params::AbstractParamsB1)
 end
 
 function finalize!(∂F, ΔF, bs, params::AbstractParamsB1B3)
-	N, m, β, u, u₁ = params.N, params.m, params.β, params.u, params.u₁
+	N, m, β, u, u₁, u₃ = params.N, params.m, params.β, params.u, params.u₁, params.u₃
 	mΔτ = β/N
-    ΔF = mΔτ*(u*sum(abs2, view(bs, 1:N)) + u₁*sum(abs2, view(bs, (N+1):2N)) + u*sum(abs2, view(bs, (2N+1):3N))) - ΔF
+    ΔF = mΔτ*(u*sum(abs2, view(bs, 1:N)) + u₁*sum(abs2, view(bs, (N+1):2N)) + u₃*sum(abs2, view(bs, (2N+1):3N))) - ΔF
 	∂F .*= -1.0
 	for i = 1:N
 		∂F[i] += 2mΔτ*u*bs[i]
@@ -379,15 +379,15 @@ function finalize!(∂F, ΔF, bs, params::AbstractParamsB1B3)
 		∂F[i] += 2mΔτ*u₁*bs[i]
 	end
     for i = (2N+1):3N
-		∂F[i] += 2mΔτ*u*bs[i]
+		∂F[i] += 2mΔτ*u₃*bs[i]
 	end
     return ΔF, pin_bs!(∂F, params)
 end
 
 function finalize(ΔF, bs, params::AbstractParamsB1B3)
-	N, m, β, u, u₁ = params.N, params.m, params.β, params.u, params.u₁
+	N, m, β, u, u₁, u₃ = params.N, params.m, params.β, params.u, params.u₁, params.u₃
 	mΔτ = β/N
-    return mΔτ*(u*(sum(abs2, view(bs, 1:N)) + sum(abs2, view(bs, (2N+1):3N))) + u₁*sum(abs2, view(bs, (N+1):2N))) - ΔF
+    return mΔτ*(u*sum(abs2, view(bs, 1:N)) + u₃*sum(abs2, view(bs, (2N+1):3N)) + u₁*sum(abs2, view(bs, (N+1):2N))) - ΔF
 end
 
 function finalize!(∂F, ∂²F, ΔF, bs, params::AbstractParamsNoB1)

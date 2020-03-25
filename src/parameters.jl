@@ -20,6 +20,7 @@ struct ParamsB1B3 <: AbstractParamsB1B3
     β::Float64
     u::Float64
     u₁::Float64
+	u₃::Float64
 end
 
 struct ParamsB3 <: AbstractParamsB1B3
@@ -28,6 +29,7 @@ struct ParamsB3 <: AbstractParamsB1B3
     β::Float64
     u::Float64
 	u₁::Float64
+	u₃::Float64
 end
 
 struct ParamsB1_pinned <: AbstractParamsB1
@@ -75,13 +77,25 @@ function get_u₀(β, psamples_raw)
     return s/4.0
 end
 
-for Params_constr in Symbol.(subtypes(AbstractParamsB1))
+for Params_constr in (:ParamsB1, :ParamsB1_pinned, :ParamsB1_pinned²)
 	@eval begin
 		function $Params_constr(β::Float64, m::Int64, Δτ::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}})
 			N = 4*(div(ceil(Int64, β/(m*Δτ)), 4) + 1)
 			u₀ = get_u₀(β, psamples_raw)
 			u₁ = u₀*a
 			return $Params_constr(N, m, β, u₀, u₁)
+		end
+	end
+end
+
+for Params_constr in (:ParamsB1B3, :ParamsB3)
+	@eval begin
+		function $Params_constr(β::Float64, m::Int64, Δτ::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}}, a₃ = 1.0)
+			N = 4*(div(ceil(Int64, β/(m*Δτ)), 4) + 1)
+			u₀ = get_u₀(β, psamples_raw)
+			u₁ = u₀*a
+			u₃ = u₀*a₃
+			return $Params_constr(N, m, β, u₀, u₁, u₃)
 		end
 	end
 end
@@ -205,16 +219,43 @@ end
 
 
 wfunc(y::Float64) = y==0.0 ? 0.0 : y^2*log((1+sqrt(1-y^6))/abs(y)^3)
-wfunc_gauss(y::Real) = log((1+sqrt(1-y^2))/abs(y))
+@inline wfunc_gauss(y::Real) = y==0.0 ? 0.0 : log((1+sqrt(1-y^2))/abs(y))
+@inline wfunc_supplementary(y::Real) = -1/y*wfunc_gauss(y)
 
-(rdisp::ReducedDispersion)(y::Float64, dy::Float64) = (-rdisp.μ, rdisp.P + rdisp.α*rdisp.Λ*y^3, wfunc(y)*6dy*rdisp.Λ/(2π)^2)::NTuple{3,Float64}
+function get_quadrature(rdisp::ReducedDispersion, rtol::Float64 = 1e-6, limit::Int64 = 200)
+	α, P, μ, Λ = rdisp.α, rdisp.P, rdisp.μ, rdisp.Λ
+	f(x) = 1/x*wfunc_gauss((x-P)/Λ)
+	if abs(P)<Λ
+		I, E, segs = quadgk_cauchy(f, P-Λ, P+Λ, 0.0, P; rtol=rtol, limit=limit)
+	else
+		I, E, segs = quadgk_custom(f, P-Λ, P+Λ, P; rtol = rtol, limit=limit)
+	end
+	x₁, w₁, x₂, w₂ = construct_quadrature(segs)
+	return x₂, w₂./(α*2*π^2)
+end
 
-#function get_psamples(rdisp::ReducedDispersion, Nₚ)
-#    psamples_raw = rdisp.(range(-1.0,1.0; length = Nₚ), 2.0/(Nₚ-1))
-#	psamples_raw[1] = (psamples_raw[1][1], psamples_raw[1][2], 0.5*psamples_raw[1][3])
-#	psamples_raw[end] = (psamples_raw[end][1], psamples_raw[end][2], 0.5*psamples_raw[end][3])
-#	return psamples_raw
-#end
+function get_psamples(rdisp::ReducedDispersion, rtol::Float64 = 1e-6, limit::Int64 = 200)
+	ε⁻s, ws = get_quadrature(rdisp, rtol, limit)
+	μ = rdisp.μ
+	return [(μ, ε⁻s[i], ws[i]) for i in eachindex(ws)]
+end
+
+#########################################################
+
+(rdisp::ReducedDispersion)(y::Float64, dy::Float64) = (-rdisp.μ, rdisp.P + rdisp.Λ*y^3, wfunc(y)*6dy*rdisp.Λ/(rdisp.α*(2π)^2))::NTuple{3,Float64}
+apply_rdisp(rdisp::ReducedDispersion, y::Float64, w::Float64) = (-rdisp.μ, rdisp.P + rdisp.Λ*y^3, 6w*rdisp.Λ/(rdisp.α*(2π)^2))::NTuple{3,Float64}
+
+function get_psamples_new(rdisp::ReducedDispersion, Nₚ)
+	ys, ws = gauss(wfunc, Nₚ, -1.0, 1.0)
+	return [apply_rdisp(rdisp, ys[i], ws[i]) for i = 1:Nₚ] 
+end
+
+function get_psamples_old(rdisp::ReducedDispersion, Nₚ)
+    psamples_raw = rdisp.(range(-1.0,1.0; length = Nₚ), 2.0/(Nₚ-1))
+	psamples_raw[1] = (psamples_raw[1][1], psamples_raw[1][2], 0.5*psamples_raw[1][3])
+	psamples_raw[end] = (psamples_raw[end][1], psamples_raw[end][2], 0.5*psamples_raw[end][3])
+	return psamples_raw
+end
 
 function get_psamples(rdisp::ReducedDispersion, Nₚ)
 	temp_quad(f, _a, _b; kwargs...) = quadgk(f, -1.0, 0.0, 1.0; kwargs...)
@@ -222,13 +263,15 @@ function get_psamples(rdisp::ReducedDispersion, Nₚ)
 	return [(-rdisp.μ, rdisp.P + rdisp.Λ*ys[i], 2*rdisp.Λ*ws[i]/(rdisp.α*(2pi)^2)) for i in eachindex(ws)]
 end
 
+#########################################################
+
 function widen(psamples_raw::Vector{NTuple{3, Float64}}, β′::Float128, γ)
 	psamples_widened = Vector{Tuple{Float64, Float64, Float64, Float128, Float128}}()
 	for psample in psamples_raw
 		εₚ⁺′ = Float128(psample[1])
 		κₚ⁰ = sqrt(γ^2 + psample[2]^2)
 		a = cosh(β′*εₚ⁺′)
-		b = 1.0/(a + cosh(β′*κₚ⁰))
+		b = log(a + cosh(β′*κₚ⁰))
 		push!(psamples_widened, (psample..., a, b))
 	end
 	return psamples_widened
@@ -271,7 +314,7 @@ macro unpack(var, args...)
     return Expr(:block, exs...)
 end
 
-function get_psamples(disp::Dispersion, Nₜ, Nᵩ)
+function get_psamples_bad(disp::Dispersion, Nₜ, Nᵩ)
 	#@unpack disp α α′ μ Λ P
 	α, α′, μ, Λ, P = disp.α, disp.α′, disp.μ, disp.Λ, disp.P
 	φs, wᵩs = gauss(wfunc_φ, Nᵩ, -1.0, 1.0)
@@ -291,3 +334,26 @@ function get_psamples(disp::Dispersion, Nₜ, Nᵩ)
 	end
 	return psamples_raw
 end
+
+function get_psamples_simple(disp::Dispersion, Nₜ, Nᵩ)
+	#@unpack disp α α′ μ Λ P
+	α, α′, μ, Λ, P = disp.α, disp.α′, disp.μ, disp.Λ, disp.P
+	φs, wᵩs = [(i-0.5)*π/Nᵩ for i=1:Nᵩ], fill!(zeros(Nᵩ), π/Nᵩ)
+	ts, wₜs = gauss(Nₜ, 0.0, 1.0)
+	c1 = 4*Λ/((α + α′)*(2π)^2) 
+	c2 = (α - α′)/(α + α′)*Λ
+	psamples_raw = Vector{NTuple{3, Float64}}()
+	for iₜ = 1:Nₜ
+		t = ts[iₜ]
+		wₜ = wₜs[iₜ]
+		εₚ⁺ = c2*t - μ
+		for iᵩ = 1:Nᵩ
+			wₚ = c1*wₜ*wᵩs[iᵩ]
+			εₚ⁻ = Λ*t*cos(φs[iᵩ]) + P
+			push!(psamples_raw, (εₚ⁺, εₚ⁻, wₚ))
+		end
+	end
+	return psamples_raw
+end
+
+get_psamples(disp::Dispersion, Nₜ, Nᵩ) = get_psamples_simple(disp, Nₜ, Nᵩ)
