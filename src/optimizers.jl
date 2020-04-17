@@ -245,4 +245,64 @@ function params_walkthrough3(P_range::AbstractRange, Λ_range::AbstractRange, sa
 	end
 end
 
+########################
+
+function get_optimum(k::Float64, m::Int64, N::Int64, a::Float64, rdisp::ReducedDispersion, opt::Optim.Options, int_rtol::Real=1e-6, limits::Int64 = 200)
+	t′ = -time()
+	psamples_raw = get_psamples(rdisp, int_rtol, limits)
+    psamples = separate_psamples(psamples_raw)
+	Nₚ = length(psamples_raw)
+	@info "Number of ε⁻ points is: $Nₚ.\n\n"
+    params = ParamsB1(N, m, k, a, psamples_raw)
+    params0 = ParamsNoB1(params.N, params.m, params.W, params.u)
+	####
+    τs = get_τs(params0)
+    bs0 = get_bs(τs)
+	d0 = construct_objective(params0, psamples, bs0)
+	results0 = optimize(d0, bs0, LBFGS(m=120, linesearch = LineSearches.MoreThuente()), opt)
+	f_seed = Optim.minimum(results0)
+	bs_seed = Optim.minimizer(results0)
+    bs_seed′ = zeros(get_length(params))
+    bs_seed′[1:params.N] .= bs_seed
+	t′ += time()
+	@info "Free energy of seed configuration is $f_seed. Calculation took $t′ s.\n\n"
+	####
+	t′ = -time()
+	d = construct_objective(params, psamples, bs_seed′)
+	results = optimize(d, bs_seed′, LBFGS(m=120, linesearch = LineSearches.MoreThuente()), opt)
+	f_final = Optim.minimum(results)
+	bs_final = Optim.minimizer(results)
+	t′ += time()
+	@info "Free energy of final configuration is $f_final. Calculation took $t′ s.\n\n"
+    return f_seed, bs_seed, f_final, bs_final, τs
+end
+
+function km_walkthrough(k_range::AbstractRange, m_range::AbstractRange, N::Int64, a::Float64, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200)
+    tups = vec([tup for tup in product(k_range, m_range)])
+    N_tot = length(tups)
+    t0 = time()
+    for i in eachindex(tups)
+        t1 = time()
+        k, m = tups[i]
+        @info "I am currently dealing with $i-th tuple of (k, m), which is (k, m) = ($k, $m).\n\n"
+        try
+            f_seed, bs_seed, f_final, bs_final, τs = get_optimum(k, m, N, a, rdisp, opt, int_rtol, limits)
+			jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
+				@stash!(file, k, m, N, a, rdisp, opt, int_rtol, limits, f_seed, bs_seed, f_final, bs_final, τs)
+			end
+			saver_o.iter += 1
+        catch ex
+			stacktrace_string = catch_backtrace() |> stacktrace |> process_stacktrace
+			@error "This Error occured for $i-th tuple of (P, Λ), which is (P, Λ) = ($P, $Λ).\n $ex\n$stacktrace_string\n\n"
+			f_seed, bs_seed, f_final, bs_final, τs = missing, missing, missing, missing, missing, missing
+			jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
+				@stash!(file, k, m, N, a, rdisp, opt, int_rtol, limits, f_seed, bs_seed, f_final, bs_final, τs)
+			end
+			saver_o.iter += 1
+        end
+        t2 = time()
+        @info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m) = ($k, $m). This run took $(t2-t1) s.\n\n\n\n"
+    end
+end
+
 

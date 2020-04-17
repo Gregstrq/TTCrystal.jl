@@ -9,106 +9,135 @@ abstract type AbstractSharedCash end
 struct ParamsB1 <: AbstractParamsB1
     N::Int64
     m::Int64
-    β::Float64
+    W::Float64
     u::Float64
     u₁::Float64
+    Δτ::Float64
+    ParamsB1(N, m, W, u, u₁) = new(N, m, W, u, u₁, W/N)
 end
 
 struct ParamsB1B3 <: AbstractParamsB1B3
     N::Int64
     m::Int64
-    β::Float64
+    W::Float64
     u::Float64
     u₁::Float64
 	u₃::Float64
+    Δτ::Float64
+    ParamsB1B3(N, m, W, u, u₁, u₃) = new(N, m, W, u, u₁, u₃, W/N)
 end
 
 struct ParamsB3 <: AbstractParamsB1B3
     N::Int64
     m::Int64
-    β::Float64
+    W::Float64
     u::Float64
 	u₁::Float64
 	u₃::Float64
+    Δτ::Float64
+    ParamsB3(N, m, W, u, u₁, u₃) = new(N, m, W, u, u₁, u₃, W/N)
 end
 
 struct ParamsB1_pinned <: AbstractParamsB1
     N::Int64
     m::Int64
-    β::Float64
+    W::Float64
     u::Float64
     u₁::Float64
+    Δτ::Float64
 	i_pinned::Int64
-	ParamsB1_pinned(N::Int64, m::Int64, β::Float64, u::Float64, u₁::Float64) = new(N, m, β, u, u₁, div(N,2)+1)
+	ParamsB1_pinned(N::Int64, m::Int64, W::Float64, u::Float64, u₁::Float64) = new(N, m, W, u, u₁, W/N, div(N,2)+1)
 end
 
 struct ParamsB1_pinned² <: AbstractParamsB1
     N::Int64
     m::Int64
-    β::Float64
+    W::Float64
     u::Float64
     u₁::Float64
+    Δτ::Float64
 	i_pinned::Int64
-	ParamsB1_pinned²(N::Int64, m::Int64, β::Float64, u::Float64, u₁::Float64) = new(N, m, β, u, u₁, div(N,2)+1)
+	ParamsB1_pinned²(N::Int64, m::Int64, W::Float64, u::Float64, u₁::Float64) = new(N, m, W, u, u₁, W/N, div(N,2)+1)
 end
 
 struct ParamsNoB1 <: AbstractParamsNoB1
     N::Int64
     m::Int64
-    β::Float64
+    W::Float64
     u::Float64
+    Δτ::Float64
+    ParamsNoB1(N, m, W, u) = new(N, m, W, u, W/N)
 end
 
 struct ParamsNoB1_pinned <: AbstractParamsNoB1
     N::Int64
     m::Int64
-    β::Float64
+    W::Float64
     u::Float64
+    Δτ::Float64
 	i_pinned::Int64
-    ParamsNoB1_pinned(N::Int64, m::Int64, β::Float64, u::Float64) = new(N, m, β, u, div(N,2)+1)
+    ParamsNoB1_pinned(N::Int64, m::Int64, W::Float64, u::Float64) = new(N, m, W, u, W/N, div(N,2)+1)
 end
 
 function get_u₀(β, psamples_raw)
     s = 0.0
 	for (εₚ⁺, εₚ⁻, wₚ) in psamples_raw
         κₚ = sqrt(εₚ⁻^2 + 1.0)
-        s += wₚ*(sign(εₚ⁺+κₚ) + sign(κₚ-εₚ⁺))/κₚ
+        s += wₚ*(tanh(β*(εₚ⁺+κₚ)/2) + tanh(β*(κₚ-εₚ⁺)/2))/κₚ
     end
     return s/4.0
 end
 
 for Params_constr in (:ParamsB1, :ParamsB1_pinned, :ParamsB1_pinned²)
 	@eval begin
-		function $Params_constr(β::Float64, m::Int64, Δτ::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}})
-			N = 4*(div(ceil(Int64, β/(m*Δτ)), 4) + 1)
-			u₀ = get_u₀(β, psamples_raw)
+		function $Params_constr(N::Int64, m::Int64, k::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}})
+            W = 4*K(k^2)
+			u₀ = get_u₀(W*m, psamples_raw)
 			u₁ = u₀*a
-			return $Params_constr(N, m, β, u₀, u₁)
+			return $Params_constr(N + 1 - rem(N, 2), m, W, u₀, u₁)
 		end
 	end
 end
 
 for Params_constr in (:ParamsB1B3, :ParamsB3)
 	@eval begin
-		function $Params_constr(β::Float64, m::Int64, Δτ::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}}, a₃ = 1.0)
-			N = 4*(div(ceil(Int64, β/(m*Δτ)), 4) + 1)
-			u₀ = get_u₀(β, psamples_raw)
+		function $Params_constr(N::Int64, m::Int64, k::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}}, a₃ = 1.0)
+            W = 4*K(k^2)
+			u₀ = get_u₀(W*m, psamples_raw)
 			u₁ = u₀*a
 			u₃ = u₀*a₃
-			return $Params_constr(N, m, β, u₀, u₁, u₃)
+			return $Params_constr(N + 1 - rem(N, 2), m, W, u₀, u₁, u₃)
 		end
 	end
 end
 
 for Params_constr in Symbol.(subtypes(AbstractParamsNoB1))
 	@eval begin
-		function $Params_constr(β::Float64, m::Int64, Δτ::Float64, psamples_raw::Vector{NTuple{3, Float64}})
-			N = 4*(div(ceil(Int64, β/(m*Δτ)), 4) + 1)
-			u₀ = get_u₀(β, psamples_raw)
-			return $Params_constr(N, m, β, u₀)
+		function $Params_constr(N::Int64, m::Int64, k::Float64, psamples_raw::Vector{NTuple{3, Float64}})
+            W = 4*K(k^2)
+			u₀ = get_u₀(W*m, psamples_raw)
+			return $Params_constr(N + 1 - rem(N, 2), m, W, u₀)
 		end
 	end
 end
+
+########
+
+get_length(params::AbstractParamsB1) = 2params.N
+get_length(params::Union{ParamsB3, ParamsB1B3}) = 3params.N
+get_length(params::AbstractParamsNoB1) = params.N
+
+get_τs(params::AbstractParams) = collect(0:params.N-1)*params.Δτ
+
+get_bs(τs, k) = k*Jacobi.sn.(τs, k^2)
+function get_bs(params::AbstractParams)
+    bs = zeros(get_length(params))
+    bs[1:params.N] .= get_bs(get_τs(params), params.k)
+    pin_bs!(bs, params)
+    return bs
+end
+
+########
 
 get_pinned_idxs(params::Union{ParamsNoB1, ParamsB1, ParamsB1B3}) = Int64[]
 get_pinned_idxs(params::Union{ParamsB1_pinned, ParamsNoB1_pinned}) = [1, params.i_pinned]
@@ -151,9 +180,6 @@ struct BFGSOptAlg <: AbstractOptAlg end
 generate_cash(::NewtonOptAlg, params::AbstractParams) = GH_Cash(params)
 generate_cash(::BFGSOptAlg, params::AbstractParams) = G_Cash(params)
 
-get_length(params::AbstractParamsB1) = 2params.N
-get_length(params::Union{ParamsB3, ParamsB1B3}) = 3params.N
-get_length(params::AbstractParamsNoB1) = params.N
 
 struct GH_Cash <: AbstractSharedCash
 	∂Fs::Vector{SharedVector{Float64}}

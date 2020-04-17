@@ -180,43 +180,24 @@ end
 
 function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs::AbstractVector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ, a, b)
 	N₀, N, m, β = length(bs), params.N, params.m, params.β
-	U = compute_single_period!(∂U, U_cash, process_bs(bs, params), εₚ⁻, β/(N*m))
+	U = compute_single_period!(∂U, U_cash, process_bs(bs, params), εₚ⁻, params.Δτ)
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
-	mFₚ⁻¹ = m/(2*a/λ₁^m + 1.0 + (λ₂/λ₁)^m)
+	Fₚ⁻¹ = 1/(2*a/λ₁^m + 1.0 + (λ₂/λ₁)^m)
 	for i = 1:N₀
 		∂Uⁱₛ = S⁻¹*∂U[i]*S
-		∂Fₚ[i] += wₚ*mFₚ⁻¹*(1/λ₁)*real(∂Uⁱₛ[1,1]+(λ₂/λ₁)^(m-1)*∂Uⁱₛ[2,2])
+		∂Fₚ[i] += wₚ*Fₚ⁻¹*(1/λ₁)*real(∂Uⁱₛ[1,1]+(λ₂/λ₁)^(m-1)*∂Uⁱₛ[2,2])
 	end
-	return wₚ*Float64(log(abs(a + 0.5*(λ₁^m + λ₂^m)))-b)
+    return Float64(wₚ*(log(abs(a + 0.5*(λ₁^m + λ₂^m)))-b)/m)
 end
 
 function compute_full_span(bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ, a, b)
 	β, m, N = params.β, params.m, params.N
-	Δτ = β/(m*N)
-	U = compute_ordered_exp(process_bs(bs, params), εₚ⁻, Δτ)
+	U = compute_ordered_exp(process_bs(bs, params), εₚ⁻, params.Δτ)
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
-	return wₚ*Float64(log(abs(a + 0.5*(λ₁^m + λ₂^m)))-b)
+    return Float64(wₚ*(log(abs(a + 0.5*(λ₁^m + λ₂^m)))-b)/m)
 end
 
 ############################
-
-function process_chunk!(∂F::SharedArray{Float64}, ∂²F::SharedArray{Float64}, bs, params::AbstractParams, psamples::AbstractVector{NTuple{3, Float64}})
-	fill!(∂F, 0.0)
-	fill!(∂²F, 0.0)
-	∂Fₚ = similar(∂F)
-	∂²Fₚ = similar(∂²F)
-	∂U = similar(∂F, SMatrix{2,2, Complex{Float128}})
-	∂²U = similar(∂²F, SMatrix{2,2, Complex{Float128}})
-	U_cash = Vector{SMatrix{2,2, Complex{Float128}}}(undef, params.N+1)
-	#Um_cash = OffsetVector(Vector{SMatrix{2,2, Complex{Float128}}}(undef, params.m+1), 0:params.m)
-	ΔF = zero(Float64)
-	for (εₚ⁺, εₚ⁻, wₚ) in psamples
-		ΔF += wₚ*compute_full_span!(∂Fₚ, ∂²Fₚ, ∂U, ∂²U, U_cash, bs, params, εₚ⁺, εₚ⁻)
-		∂F .+= wₚ.*∂Fₚ
-		∂²F .+= wₚ.*∂²Fₚ
-	end
-	return ΔF
-end
 
 function process_chunk!(∂F::AbstractVector{Float64}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs, params::AbstractParams, psamples::AbstractVector{Tuple{Float64, Float64, Float64, Float128, Float128}})
 	fill!(∂F, 0.0)
@@ -250,44 +231,9 @@ end
 true_workers() = nworkers()>1 ? workers() : Int64[]
 
 
-function precompute_step!(∂Fs::Vector{SharedVector{Float64}}, ∂²Fs::Vector{SharedMatrix{Float64}}, bs, params::AbstractParams, psamples)
-	fs = Vector{Future}(undef, nprocs())
-    @sync begin
-        for wid in true_workers()
-			fs[wid] = @spawnat wid process_chunk!(∂Fs[wid], ∂²Fs[wid], bs, params, psamples[wid])
-        end
-		if nworkers()>1
-			fs[1] = @spawnat 1 process_chunk!(∂Fs[1], ∂²Fs[1], bs, params, psamples[1])
-		end
-    end
-	ΔF = sum(fetch.(fs))
-    for wid in true_workers()
-		∂Fs[1] .+= ∂Fs[wid]
-		∂²Fs[1] .+= ∂²Fs[wid]
-	end
-	@everywhere GC.gc()
-	return finalize!(∂Fs[1], ∂²Fs[1], ΔF, bs, params)
-end
 
-function precompute_step!(GH_storage::GH_Cash, bs, params::AbstractParams, psamples)
-	∂Fs, ∂²Fs = GH_storage.∂Fs, GH_storage.∂²Fs
-	fs = Vector{Future}(undef, nprocs())
-    @sync begin
-        for wid in true_workers()
-			fs[wid] = @spawnat wid process_chunk!(∂Fs[wid], ∂²Fs[wid], bs, params, psamples[wid])
-        end
-		fs[1] = @spawnat 1 process_chunk!(∂Fs[1], ∂²Fs[1], bs, params, psamples[1])
-    end
-	ΔF = sum(fetch.(fs))
-    for wid in true_workers()
-		∂Fs[1] .+= ∂Fs[wid]
-		∂²Fs[1] .+= ∂²Fs[wid]
-	end
-	@everywhere GC.gc()
-	return finalize!(∂Fs[1], ∂²Fs[1], ΔF, bs, params)
-end
 
-function precompute_step!(G_storage::G_Cash, bs, params::AbstractParams, psamples, ΔF₀)
+function precompute_step!(G_storage::G_Cash, bs, params::AbstractParams, psamples)
 	∂Fs, ∂Us, U_cashes = G_storage.∂Fs, G_storage.∂Us, G_storage.U_cashes
 	fs = Vector{Future}(undef, nprocs())
     @sync begin
@@ -301,7 +247,7 @@ function precompute_step!(G_storage::G_Cash, bs, params::AbstractParams, psample
     for wid in true_workers()
 		∂Fs[1] .+= ∂Fs[wid]
 	end
-	return finalize!(∂Fs[1], ΔF + ΔF₀, bs, params)
+	return finalize!(∂Fs[1], ΔF, bs, params)
 end
 
 function compute_grad_components!(G_storage::G_Cash2, bs, params::AbstractParams, psamples)
@@ -317,7 +263,7 @@ function compute_grad_components!(G_storage::G_Cash2, bs, params::AbstractParams
 	return ∂Fs
 end
 
-function precompute_step(bs::AbstractVector{Float64}, params::AbstractParams, psamples, ΔF₀)
+function precompute_step(bs::AbstractVector{Float64}, params::AbstractParams, psamples)
 	fs = Vector{Future}(undef, nprocs())
     @sync begin
         for wid in true_workers()
@@ -326,96 +272,62 @@ function precompute_step(bs::AbstractVector{Float64}, params::AbstractParams, ps
 		fs[1] = @spawnat 1 process_chunk(bs, params, localpart(psamples))
     end
 	ΔF = sum(fetch.(fs))
-   	return finalize(ΔF + ΔF₀, bs, params)
+   	return finalize(ΔF, bs, params)
 end
 
 
-function finalize!(∂F, ∂²F, ΔF, bs, params::AbstractParamsB1)
-	N, m, β, u, u₁ = params.N, params.m, params.β, params.u, params.u₁
-	mΔτ = β/N
-	ΔF = mΔτ*(u*sum(abs2, bs[1:N]) + u₁*sum(abs2, bs[(N+1):2N])) - ΔF
-	∂F .*= -1.0
-	∂²F .*= -1.0
-	for i = 1:N
-		∂F[i] += 2mΔτ*u*bs[i]
-		∂²F[i,i] += 2mΔτ*u
-	end
-	for i = (N+1):2N
-		∂F[i] += 2mΔτ*u₁*bs[i]
-		∂²F[i,i] += 2mΔτ*u₁
-	end
-    return ΔF, pin_bs!(∂F, params), (∂²F)
-end
 
 function finalize!(∂F, ΔF, bs, params::AbstractParamsB1)
-	N, m, β, u, u₁ = params.N, params.m, params.β, params.u, params.u₁
-	mΔτ = β/N
-	ΔF = mΔτ*(u*sum(abs2, bs[1:N]) + u₁*sum(abs2, bs[(N+1):2N])) - ΔF
+	N, Δτ, u, u₁ = params.N, params.Δτ, params.u, params.u₁
+    ΔF = Δτ*(u*sum(x->(abs2(x)-1), bs[1:N]) + u₁*sum(abs2, bs[(N+1):2N])) - ΔF
 	∂F .*= -1.0
 	for i = 1:N
-		∂F[i] += 2mΔτ*u*bs[i]
+		∂F[i] += 2Δτ*u*bs[i]
 	end
 	for i = (N+1):2N
-		∂F[i] += 2mΔτ*u₁*bs[i]
+		∂F[i] += 2Δτ*u₁*bs[i]
 	end
     return ΔF, pin_bs!(∂F, params)
 end
 
 function finalize(ΔF, bs, params::AbstractParamsB1)
-	N, m, β, u, u₁ = params.N, params.m, params.β, params.u, params.u₁
-	mΔτ = β/N
-	return mΔτ*(u*sum(abs2, bs[1:N]) + u₁*sum(abs2, bs[(N+1):2N])) - ΔF
+	N, Δτ, u, u₁ = params.N, params.Δτ, params.u, params.u₁
+	return Δτ*(u*sum(x->(abs2(x)-1), bs[1:N]) + u₁*sum(abs2, bs[(N+1):2N])) - ΔF
 end
 
 function finalize!(∂F, ΔF, bs, params::AbstractParamsB1B3)
-	N, m, β, u, u₁, u₃ = params.N, params.m, params.β, params.u, params.u₁, params.u₃
-	mΔτ = β/N
-    ΔF = mΔτ*(u*sum(abs2, view(bs, 1:N)) + u₁*sum(abs2, view(bs, (N+1):2N)) + u₃*sum(abs2, view(bs, (2N+1):3N))) - ΔF
+	N, Δτ, u, u₁, u₃ = params.N, params.Δτ, params.u, params.u₁, params.u₃
+    ΔF = Δτ*(u*sum(x->(abs2(x)-1), view(bs, 1:N)) + u₁*sum(abs2, view(bs, (N+1):2N)) + u₃*sum(abs2, view(bs, (2N+1):3N))) - ΔF
 	∂F .*= -1.0
 	for i = 1:N
-		∂F[i] += 2mΔτ*u*bs[i]
+		∂F[i] += 2Δτ*u*bs[i]
 	end
 	for i = (N+1):2N
-		∂F[i] += 2mΔτ*u₁*bs[i]
+		∂F[i] += 2Δτ*u₁*bs[i]
 	end
     for i = (2N+1):3N
-		∂F[i] += 2mΔτ*u₃*bs[i]
+		∂F[i] += 2Δτ*u₃*bs[i]
 	end
     return ΔF, pin_bs!(∂F, params)
 end
 
 function finalize(ΔF, bs, params::AbstractParamsB1B3)
-	N, m, β, u, u₁, u₃ = params.N, params.m, params.β, params.u, params.u₁, params.u₃
-	mΔτ = β/N
-    return mΔτ*(u*sum(abs2, view(bs, 1:N)) + u₃*sum(abs2, view(bs, (2N+1):3N)) + u₁*sum(abs2, view(bs, (N+1):2N))) - ΔF
+	N, Δτ, u, u₁, u₃ = params.N, params.Δτ, params.u, params.u₁, params.u₃
+    return Δτ*(u*sum(x->(abs2(x)-1), view(bs, 1:N)) + u₃*sum(abs2, view(bs, (2N+1):3N)) + u₁*sum(abs2, view(bs, (N+1):2N))) - ΔF
 end
 
-function finalize!(∂F, ∂²F, ΔF, bs, params::AbstractParamsNoB1)
-	N, m, β, u = params.N, params.m, params.β, params.u
-	mΔτ = β/N
-	ΔF = mΔτ*u*sum(abs2, bs) - ΔF
-	∂F .*= -1.0
-	∂²F .*= -1.0
-	for i = 1:N
-		∂F[i] += 2mΔτ*u*bs[i]
-		∂²F[i,i] += 2mΔτ*u
-	end
-    return ΔF, pin_bs!(∂F, params), ∂²F
-end
 
 function finalize!(∂F, ΔF, bs, params::AbstractParamsNoB1)
-	N, m, β, u = params.N, params.m, params.β, params.u
-	mΔτ = β/N
-	ΔF = mΔτ*u*sum(abs2, bs) - ΔF
+	N, Δτ, u = params.N, params.Δτ, params.u
+	ΔF = Δτ*u*sum(x->(abs2(x)-1), bs) - ΔF
 	∂F .*= -1.0
 	for i = 1:N
-		∂F[i] += 2mΔτ*u*bs[i]
+		∂F[i] += 2Δτ*u*bs[i]
 	end
     return ΔF, pin_bs!(∂F, params)
 end
 
 function finalize(ΔF, bs, params::AbstractParamsNoB1)
-	N, m, β, u = params.N, params.m, params.β, params.u
-	mΔτ = β/N
-	return mΔτ*u*sum(abs2, bs) - ΔF
+	N, Δτ, u = params.N, params.Δτ, params.u
+	return Δτ*u*sum(x->(abs2(x)-1), bs) - ΔF
 end

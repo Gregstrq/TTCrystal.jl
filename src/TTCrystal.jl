@@ -12,8 +12,8 @@ import Base: ==, <, >, <=, >=
 
 
 include("parameters.jl")
-include("supplementary_functions.jl")
-include("initial_conditions.jl")
+#include("supplementary_functions.jl")
+#include("initial_conditions.jl")
 include("matrices.jl")
 include("structure_generation.jl")
 include("obj_functions.jl")
