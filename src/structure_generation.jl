@@ -179,7 +179,7 @@ function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂²Fₚ::Abstrac
 end
 
 function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs::AbstractVector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ, a, b)
-	N₀, N, m, β = length(bs), params.N, params.m, params.β
+	N₀, N, m = length(bs), params.N, params.m
 	U = compute_single_period!(∂U, U_cash, process_bs(bs, params), εₚ⁻, params.Δτ)
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
 	Fₚ⁻¹ = 1/(2*a/λ₁^m + 1.0 + (λ₂/λ₁)^m)
@@ -191,7 +191,7 @@ function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂U::AbstractVect
 end
 
 function compute_full_span(bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ, a, b)
-	β, m, N = params.β, params.m, params.N
+	m, N = params.m, params.N
 	U = compute_ordered_exp(process_bs(bs, params), εₚ⁻, params.Δτ)
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
     return Float64(wₚ*(log(abs(a + 0.5*(λ₁^m + λ₂^m)))-b)/m)
