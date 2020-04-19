@@ -1,18 +1,11 @@
 ############################
 
-function compute_ordered_exp(bs::T, i::Int64, j::Int64, εₚ⁻::Float64, Δτ::Float64) where T<:Tuple{AbstractVector{Float64}, Vararg{AbstractVector{Float64}}}
-	M = one(SMatrix{2,2, Complex{Float128}})
-	for i′ = i:j
-		M = B(bs, i′, εₚ⁻, Δτ)*M
-	end
-	return M
-end
 
 function compute_ordered_exp(bs::T, εₚ⁻::Float64, Δτ::Float64) where T<:Tuple{AbstractVector{Float64}, Vararg{AbstractVector{Float64}}}
 	N = length(bs[1])
 	M = one(SMatrix{2,2, Complex{Float128}})
 	for i = N:-1:1
-		M = M*B(bs, i, εₚ⁻, Δτ)
+		M = M*Br(bs, i, εₚ⁻, Δτ)
 	end
 	return M
 end
@@ -22,7 +15,7 @@ function compute_U_cash!(U_cash, bs::T, εₚ⁻, Δτ) where T<:Tuple{AbstractV
 	M = one(SMatrix{2,2, Complex{Float128}})
 	U_cash[N+1] = M
 	for i′ = N:-1:1
-		M = M*B(bs, i′, εₚ⁻, Δτ)
+		M = M*Br(bs, i′, εₚ⁻, Δτ)
 		U_cash[i′] = M
 	end
 end
@@ -40,17 +33,17 @@ function compute_single_period!(∂U::AbstractVector{SMatrix{2,2, Complex{Float1
 	compute_U_cash!(U_cash, bs, εₚ⁻, Δτ)
 	Mb = one(SMatrix{2,2, Complex{Float128}})
 	for i = 1:N
-		∂²₀₀U[i,i] = U_cash[i+1]*B′′₀₀(bs, i, εₚ⁻, Δτ)*Mb
-		∂²₀₁U[i,i] = U_cash[i+1]*B′′₀₁(bs, i, εₚ⁻, Δτ)*Mb
+		∂²₀₀U[i,i] = U_cash[i+1]*B′′₀₀r(bs, i, εₚ⁻, Δτ)*Mb
+		∂²₀₁U[i,i] = U_cash[i+1]*B′′₀₁r(bs, i, εₚ⁻, Δτ)*Mb
 		∂²₁₀U[i,i] = ∂²₀₁U[i,i]
-		∂²₁₁U[i,i] = U_cash[i+1]*B′′₁₁(bs, i, εₚ⁻, Δτ)*Mb
-		Mbm₀ = B′₀(bs, i, εₚ⁻, Δτ)*Mb
-		Mbm₁ = B′₁(bs, i, εₚ⁻, Δτ)*Mb
+		∂²₁₁U[i,i] = U_cash[i+1]*B′′₁₁r(bs, i, εₚ⁻, Δτ)*Mb
+		Mbm₀ = B′₀r(bs, i, εₚ⁻, Δτ)*Mb
+		Mbm₁ = B′₁r(bs, i, εₚ⁻, Δτ)*Mb
 		∂₀U[i] = U_cash[i+1]*Mbm₀
 		∂₁U[i] = U_cash[i+1]*Mbm₁
 		for j = i+1:N
-			Me₀ = U_cash[j+1]*B′₀(bs, j, εₚ⁻, Δτ)
-			Me₁ = U_cash[j+1]*B′₁(bs, j, εₚ⁻, Δτ)
+			Me₀ = U_cash[j+1]*B′₀r(bs, j, εₚ⁻, Δτ)
+			Me₁ = U_cash[j+1]*B′₁r(bs, j, εₚ⁻, Δτ)
 			∂²₀₀U[j, i] = Me₀*Mbm₀
 			∂²₀₀U[i, j] = ∂²₀₀U[j, i]
 			∂²₁₁U[j, i] = Me₁*Mbm₁
@@ -59,11 +52,11 @@ function compute_single_period!(∂U::AbstractVector{SMatrix{2,2, Complex{Float1
 			∂²₀₁U[i, j] = Me₁*Mbm₀
 			∂²₁₀U[i, j] = ∂²₀₁U[j, i]
 			∂²₁₀U[j, i] = ∂²₀₁U[i, j]
-			Bⱼ = B(bs, j, εₚ⁻, Δτ)
-			Mbm₀ = Bⱼ*Mbm₀
-			Mbm₁ = Bⱼ*Mbm₁
+			Bⱼr = Br(bs, j, εₚ⁻, Δτ)
+			Mbm₀ = Bⱼr*Mbm₀
+			Mbm₁ = Bⱼr*Mbm₁
 		end
-		Mb = B(bs, i, εₚ⁻, Δτ)*Mb
+		Mb = Br(bs, i, εₚ⁻, Δτ)*Mb
 	end
 	return U_cash[1]
 end
@@ -73,15 +66,15 @@ function compute_single_period!(∂U::AbstractVector{SMatrix{2,2, Complex{Float1
 	compute_U_cash!(U_cash, bs, εₚ⁻, Δτ)
 	Mb = one(SMatrix{2,2, Complex{Float128}})
 	for i = 1:N
-		∂²U[i,i] = U_cash[i+1]*B′′₀₀(bs, i, εₚ⁻, Δτ)*Mb
-		Mbm₀ = B′₀(bs, i, εₚ⁻, Δτ)*Mb
+		∂²U[i,i] = U_cash[i+1]*B′′₀₀r(bs, i, εₚ⁻, Δτ)*Mb
+		Mbm₀ = B′₀r(bs, i, εₚ⁻, Δτ)*Mb
 		∂U[i] = U_cash[i+1]*Mbm₀
 		for j = i+1:N
-			∂²U[j, i] = U_cash[j+1]*B′₀(bs, j, εₚ⁻, Δτ)*Mbm₀
+			∂²U[j, i] = U_cash[j+1]*B′₀r(bs, j, εₚ⁻, Δτ)*Mbm₀
 			∂²U[i, j] = ∂²U[j, i]
-			Mbm₀ = B(bs, j, εₚ⁻, Δτ)*Mbm₀
+			Mbm₀ = Br(bs, j, εₚ⁻, Δτ)*Mbm₀
 		end
-		Mb = B(bs, i, εₚ⁻, Δτ)*Mb
+		Mb = Br(bs, i, εₚ⁻, Δτ)*Mb
 	end
 	return U_cash[1]
 end
@@ -94,10 +87,10 @@ function compute_single_period!(∂U::AbstractVector{SMatrix{2,2, Complex{Float1
 	compute_U_cash!(U_cash, bs, εₚ⁻, Δτ)
 	Mb = one(SMatrix{2,2, Complex{Float128}})
 	for i = 1:N
-		∂₀U[i] = U_cash[i+1]*B′₀(bs, i, εₚ⁻, Δτ)*Mb
-		∂₁U[i] = U_cash[i+1]*B′₁(bs, i, εₚ⁻, Δτ)*Mb
-		∂₃U[i] = U_cash[i+1]*B′₃(bs, i, εₚ⁻, Δτ)*Mb
-		Mb = B(bs, i, εₚ⁻, Δτ)*Mb
+		∂₀U[i] = U_cash[i+1]*B′₀r(bs, i, εₚ⁻, Δτ)*Mb
+		∂₁U[i] = U_cash[i+1]*B′₁r(bs, i, εₚ⁻, Δτ)*Mb
+		∂₃U[i] = U_cash[i+1]*B′₃r(bs, i, εₚ⁻, Δτ)*Mb
+		Mb = Br(bs, i, εₚ⁻, Δτ)*Mb
 	end
 	return U_cash[1]
 end
@@ -109,9 +102,9 @@ function compute_single_period!(∂U::AbstractVector{SMatrix{2,2, Complex{Float1
 	compute_U_cash!(U_cash, bs, εₚ⁻, Δτ)
 	Mb = one(SMatrix{2,2, Complex{Float128}})
 	for i = 1:N
-		∂₀U[i] = U_cash[i+1]*B′₀(bs, i, εₚ⁻, Δτ)*Mb
-		∂₁U[i] = U_cash[i+1]*B′₁(bs, i, εₚ⁻, Δτ)*Mb
-		Mb = B(bs, i, εₚ⁻, Δτ)*Mb
+		∂₀U[i] = U_cash[i+1]*B′₀r(bs, i, εₚ⁻, Δτ)*Mb
+		∂₁U[i] = U_cash[i+1]*B′₁r(bs, i, εₚ⁻, Δτ)*Mb
+		Mb = Br(bs, i, εₚ⁻, Δτ)*Mb
 	end
 	return U_cash[1]
 end
@@ -121,8 +114,8 @@ function compute_single_period!(∂U::AbstractVector{SMatrix{2,2, Complex{Float1
 	compute_U_cash!(U_cash, bs, εₚ⁻, Δτ)
 	Mb = one(SMatrix{2,2, Complex{Float128}})
 	for i = 1:N
-		∂U[i] = U_cash[i+1]*B′₀(bs, i, εₚ⁻, Δτ)*Mb
-		Mb = B(bs, i, εₚ⁻, Δτ)*Mb
+		∂U[i] = U_cash[i+1]*B′₀r(bs, i, εₚ⁻, Δτ)*Mb
+		Mb = Br(bs, i, εₚ⁻, Δτ)*Mb
 	end
 	return U_cash[1]
 end
@@ -182,19 +175,22 @@ function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂U::AbstractVect
 	N₀, N, m = length(bs), params.N, params.m
 	U = compute_single_period!(∂U, U_cash, process_bs(bs, params), εₚ⁻, params.Δτ)
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
-	Fₚ⁻¹ = 1/(2*a/λ₁^m + 1.0 + (λ₂/λ₁)^m)
+    λ₁ᵐ⁻¹ = λ₁^(m-1)
+    λ₂ᵐ⁻¹ = λ₂^(m-1)
+    Fₚ = a + λ₁^m + λ₂^m
+	Fₚ⁻¹ = 1/Fₚ
 	for i = 1:N₀
 		∂Uⁱₛ = S⁻¹*∂U[i]*S
-		∂Fₚ[i] += wₚ*Fₚ⁻¹*(1/λ₁)*real(∂Uⁱₛ[1,1]+(λ₂/λ₁)^(m-1)*∂Uⁱₛ[2,2])
+        ∂Fₚ[i] += wₚ*Fₚ⁻¹*real(λ₁ᵐ⁻¹*∂Uⁱₛ[1,1]+λ₂ᵐ⁻¹*∂Uⁱₛ[2,2])
 	end
-    return Float64(wₚ*(log(abs(a + 0.5*(λ₁^m + λ₂^m)))-b)/m)
+    return Float64(wₚ*(log(abs(Fₚ))-b)/m)
 end
 
 function compute_full_span(bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ, a, b)
 	m, N = params.m, params.N
 	U = compute_ordered_exp(process_bs(bs, params), εₚ⁻, params.Δτ)
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
-    return Float64(wₚ*(log(abs(a + 0.5*(λ₁^m + λ₂^m)))-b)/m)
+    return Float64(wₚ*(log(abs(a + (λ₁^m + λ₂^m)))-b)/m)
 end
 
 ############################
@@ -209,14 +205,11 @@ function process_chunk!(∂F::AbstractVector{Float64}, ∂U::AbstractVector{SMat
 end
 
 
-function process_chunk2!(∂F::AbstractVector{SharedVector{Float64}}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs, params::AbstractParams, psamples::AbstractVector{Tuple{Float64, Float64, Float64, Float128, Float128}})
-	ΔF = zero(Float64)
+function process_chunk2!(ΔFs::Vector{Float64}, ∂Fs::Vector{Vector{Float64}}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs::AbstractVector{Float64}, params::AbstractParams, psamples::AbstractVector{Tuple{Float64, Float64, Float64, Float128, Float128}})
     for i in eachindex(psamples)
-        psample = psamples[i]
-        fill!(∂F[i], 0.0)
-        ΔF += compute_full_span!(∂F[i], ∂U, U_cash, bs, params, psample...)
+        fill!(∂Fs[i], 0.0)
+        ΔFs[i] = compute_full_span!(∂Fs[i], ∂U, U_cash, bs, params, psamples[i]...)
 	end
-	return ΔF
 end
 
 function process_chunk(bs::AbstractVector{Float64}, params::AbstractParams, psamples::AbstractVector{Tuple{Float64, Float64, Float64, Float128, Float128}})
@@ -251,16 +244,14 @@ function precompute_step!(G_storage::G_Cash, bs, params::AbstractParams, psample
 end
 
 function compute_grad_components!(G_storage::G_Cash2, bs, params::AbstractParams, psamples)
-	∂Fs, ∂Us, U_cashes = G_storage.∂Fs, G_storage.∂Us, G_storage.U_cashes
-    ranges = [@fetchfrom wid DistributedArrays.localindices(psamples)[1] for wid in procs()]
-    show(ranges)
+	ΔFss, ∂Fss, ∂Us, U_cashes = G_storage.ΔFss, G_storage.∂Fss, G_storage.∂Us, G_storage.U_cashes
     @sync begin
         for wid in true_workers()
-            @spawnat wid process_chunk2!(view(∂Fs, ranges[wid]), localpart(∂Us), localpart(U_cashes), bs, params, localpart(psamples))
+            @spawnat wid process_chunk2!(localpart(ΔFss), localpart(∂Fss), localpart(∂Us), localpart(U_cashes), bs, params, localpart(psamples))
         end
-        @spawnat 1 process_chunk2!(view(∂Fs, ranges[1]), localpart(∂Us), localpart(U_cashes), bs, params, localpart(psamples))
+        @spawnat 1 process_chunk2!(localpart(ΔFss), localpart(∂Fss), localpart(∂Us), localpart(U_cashes), bs, params, localpart(psamples))
     end
-	return ∂Fs
+	return G_storage
 end
 
 function precompute_step(bs::AbstractVector{Float64}, params::AbstractParams, psamples)

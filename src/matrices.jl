@@ -27,7 +27,8 @@ function lSinch_sqrt(x²::Real)
         return lSinch_sqrt_taylor(x²)
     end
 end
-function lSinch_sqrt_taylor(x²::Real, ε::Float64 = 1e-16)
+lSinch_sqrt_taylor(x²::T) where {T<:Real} = lSinch_sqrt_taylor(x², eps(one(T)))
+function lSinch_sqrt_taylor(x²::Real, ε::Real)
     a = 1/3.0
     s = a
     k::Int64 = 0
@@ -49,7 +50,7 @@ function llSinch_sqrt(x²::Real)
         return llSinch_sqrt_taylor(x²)
     end
 end
-function llSinch_sqrt_taylor(x²::Real, ε::Float64 = 1e-16)
+function llSinch_sqrt_taylor(x²::Real, ε::Real)
     a = 1/15.0
     s = a
     k::Int64 = 0
@@ -59,6 +60,7 @@ function llSinch_sqrt_taylor(x²::Real, ε::Float64 = 1e-16)
     end
     return s
 end
+llSinch_sqrt_taylor(x²::T) where {T<:Real} = llSinch_sqrt_taylor(x², eps(one(T)))
 
 
 ##############
@@ -88,31 +90,21 @@ B′′₁₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = -one(SMatrix{2,2, Comple
 
 B′′₀₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[-b*b₁*Δτ im128*(b+b₁); im128*(b+b₁) -b*b₁*Δτ]*lSinch_sqrt(κₚ²Δτ²)*Δτ^3 - M(εₚ⁻, b, b₁)*llSinch_sqrt(κₚ²Δτ²)*b*b₁*Δτ^5
 
-for B_func in (:B, :B⁻¹, :B′₀, :B′₁, :B′′₀₀, :B′′₀₁, :B′′₁₁, :B′ₑ, :B′₃)
-	@eval begin
-		function $B_func(b_vec::AbstractVector, b₁_vec::AbstractVector, i::Int, εₚ⁻, Δτ)
-			b = b_vec[i]
-			b₁ = b₁_vec[i]
-			return $B_func(εₚ⁻, b, b₁, (εₚ⁻^2+b^2-b₁^2)*Δτ^2, Δτ)
-		end
-
-		function $B_func(b_vec::AbstractVector, i::Int, εₚ⁻, Δτ)
-			b = b_vec[i]
-			return $B_func(εₚ⁻, b, 0.0, (εₚ⁻^2+b^2)*Δτ^2, Δτ)
-		end
-
-		function $B_func(bs::NTuple{3, AbstractVector{Float64}}, i::Int, εₚ⁻, Δτ)
-			b = bs[1][i]
-			b₁ = bs[2][i]
-            ε⁻ = εₚ⁻ - bs[3][i]
-			return $B_func(ε⁻, b, b₁, (ε⁻^2+b^2-b₁^2)*Δτ^2, Δτ)
-		end
-
-		function $B_func(bs::NTuple{2, AbstractVector{Float64}}, i::Int, εₚ⁻, Δτ)
+for B_func in (:B, :B⁻¹, :B′₀, :B′₁, :B′ₑ, :B′₃, :B′′₀₀, :B′′₀₁, :B′′₁₁)
+    @eval begin
+        function $B_func(bs::NTuple{2, AbstractVector{TB}}, i::Int, εₚ⁻, Δτ) where {TB<:Real}
 			b = bs[1][i]
 			b₁ = bs[2][i]
 			return $B_func(εₚ⁻, b, b₁, (εₚ⁻^2+b^2-b₁^2)*Δτ^2, Δτ)
 		end
-		@inline $B_func(bs::Tuple{AbstractVector{Float64}}, i::Int, εₚ⁻, Δτ) = $B_func(bs[1], i, εₚ⁻, Δτ)
-	end
+
+        function $B_func(bs::Tuple{AbstractVector{TB}}, i::Int, εₚ⁻, Δτ) where {TB<:Real}
+            b = bs[1][i]
+            return $B_func(εₚ⁻, b, zero(TB), (εₚ⁻^2+b^2)*Δτ^2, Δτ)
+        end
+
+        $(Symbol(B_func,:r))(bs::Tuple{AbstractVector{TB}, Vararg{AbstractVector{TB}}}, i::Int, εₚ⁻, Δτ, γ::Real) where {TB<:Real} = $B_func(bs, i, εₚ⁻, Δτ)*exp(-sqrt(εₚ⁻^2 + γ^2)*Δτ)
+        @inline $(Symbol(B_func,:r))(bs::Tuple{AbstractVector{TB}, Vararg{AbstractVector{TB}}}, i::Int, εₚ⁻, Δτ) where {TB<:Real} = $(Symbol(B_func, :r))(bs, i, εₚ⁻, Δτ, one(TB))
+		export $B_func, $(Symbol(B_func, :r))
+    end
 end

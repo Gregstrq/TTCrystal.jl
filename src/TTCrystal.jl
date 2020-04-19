@@ -23,7 +23,7 @@ include("ctime_gfuncs.jl")
 
 export ParamsB1, ParamsB1_pinned, ParamsNoB1, ParamsNoB1_pinned, ReducedDispersion, Dispersion, Saver
 export get_u₀, get_psamples, widen
-export generate_shared_cash, generate_psamples, get_psamples, get_psamples_old, get_psamples_new
+export generate_shared_cash, generate_psamples, get_psamples, get_psamples_old, get_psamples_new, separate_psamples
 export construct_objective, process_bs
 export G_Cash, G_Cash2
 export compute_single_period!, compute_full_span!

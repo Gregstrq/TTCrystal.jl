@@ -130,9 +130,9 @@ get_length(params::AbstractParamsNoB1) = params.N
 get_τs(params::AbstractParams) = collect(0:params.N-1)*params.Δτ
 
 get_bs(τs, k) = k*Jacobi.sn.(τs, k^2)
-function get_bs(params::AbstractParams)
+function get_bs(params::AbstractParams, k)
     bs = zeros(get_length(params))
-    bs[1:params.N] .= get_bs(get_τs(params), params.k)
+    bs[1:params.N] .= get_bs(get_τs(params), k)
     pin_bs!(bs, params)
     return bs
 end
@@ -212,27 +212,39 @@ mutable struct G_Cash <: AbstractSharedCash
 	end
 end
 
-mutable struct G_Cash2 <: AbstractSharedCash
-	∂Fs::Vector{SharedVector{Float64}}
-	∂Us::DArray{SMatrix{2,2,Complex{Float128}}, 1, Vector{SMatrix{2,2,Complex{Float128}}}}
-	U_cashes::DArray{SMatrix{2,2,Complex{Float128}}, 1, Vector{SMatrix{2,2,Complex{Float128}}}}
-	function G_Cash2(params::AbstractParams, Nₚ)
-		np = nprocs()
-		N = params.N
-		N′ = get_length(params)
-        ∂Fs = [SharedVector{Float64}(N′) for i=1:Nₚ]
-		∂Us = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float128}}, N′) for i=procs()])
-		U_cashes = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float128}}, N+1) for i=procs()])
-		g_cash = new(∂Fs, ∂Us, U_cashes)
-		finalizer(free_darrays, g_cash)
-		return g_cash
-	end
-end
-
 function free_darrays(g_cash::G_Cash)
 	close(g_cash.∂Us)
 	close(g_cash.U_cashes)
 end
+
+mutable struct G_Cash2 <: AbstractSharedCash
+    ΔFss::DArray{Float64, 1, Vector{Float64}}
+    ∂Fss::DArray{Vector{Float64}, 1, Vector{Vector{Float64}}}
+	∂Us::DArray{SMatrix{2,2,Complex{Float128}}, 1, Vector{SMatrix{2,2,Complex{Float128}}}}
+	U_cashes::DArray{SMatrix{2,2,Complex{Float128}}, 1, Vector{SMatrix{2,2,Complex{Float128}}}}
+    function G_Cash2(params::AbstractParams, psamples)
+		np = nprocs()
+		N = params.N
+		N′ = get_length(params)
+        ΔFss = DArray([@spawnat i LinearAlgebra.zeros(Float64, length(localpart(psamples))) for i=procs()])
+        ∂Fss = DArray([@spawnat i [LinearAlgebra.zeros(Float64, N′) for j=1:length(localpart(psamples))] for i=procs()])
+		∂Us = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float128}}, N′) for i=procs()])
+		U_cashes = DArray([@spawnat i LinearAlgebra.ones(StaticArrays.SMatrix{2,2, Complex{Float128}}, N+1) for i=procs()])
+		g_cash = new(ΔFss, ∂Fss, ∂Us, U_cashes)
+		finalizer(free_darrays, g_cash)
+		return g_cash
+    end
+end
+
+function free_darrays(g_cash::G_Cash2)
+	close(g_cash.ΔFss)
+	close(g_cash.∂Fss)
+	close(g_cash.∂Us)
+	close(g_cash.U_cashes)
+end
+
+export G_Cash2
+
 
 ################################
 
@@ -291,13 +303,15 @@ end
 
 #########################################################
 
+
+widen(psamples_raw, β′::Float128) = widen(psamples_raw, β′, one(Float128))
 function widen(psamples_raw::Vector{NTuple{3, Float64}}, β′::Float128, γ)
 	psamples_widened = Vector{Tuple{Float64, Float64, Float64, Float128, Float128}}()
 	for psample in psamples_raw
 		εₚ⁺′ = Float128(psample[1])
 		κₚ⁰ = sqrt(γ^2 + psample[2]^2)
-		a = cosh(β′*εₚ⁺′)
-		b = log(a + cosh(β′*κₚ⁰))
+        a = exp(-β′*(κₚ⁰ - εₚ⁺′)) + exp(-β′*(κₚ⁰ + εₚ⁺′))
+        b = log(one(Float128) + exp(-2β′*κₚ⁰) + a)
 		push!(psamples_widened, (psample..., a, b))
 	end
 	return psamples_widened
