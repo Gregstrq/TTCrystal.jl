@@ -6,11 +6,34 @@ struct bfgsObjFunc{pType<:AbstractParams}
     psamples::DArray{TupType, 1, Vector{TupType}}
 end
 
-bfgsObjFunc(params::AbstractParams, rdisp::ReducedDispersion, Nₚ, γ) = bfgsObjFunc(params, G_Cash(params), generate_psamples(rdisp, Nₚ), γ)
+struct bfgsObjFunc_repul{pType<:AbstractParams}
+	params::pType
+	g_cash::G_Cash
+    psamples::DArray{TupType, 1, Vector{TupType}}
+    grep::GaugeRepulsion
+end
+
 
 function (fg!::bfgsObjFunc)(F,G, bs)
 	if !(G==nothing)
 		ΔF, ∂F = precompute_step!(fg!.g_cash, bs, fg!.params, fg!.psamples)
+		G.=∂F
+		if !(F==nothing)
+			return ΔF
+		end
+	else
+		if !(F==nothing)
+			return precompute_step(bs, fg!.params, fg!.psamples)
+		end
+	end
+end
+
+function (fg!::bfgsObjFunc_repul)(F,G, bs)
+	if !(G==nothing)
+		ΔF, ∂F = precompute_step!(fg!.g_cash, bs, fg!.params, fg!.psamples)
+        f, ∂f = compute_repulsion!(fg!.grep, bs)
+        ΔF += f
+        ∂F[1:length(∂f)] .+= ∂f
 		G.=∂F
 		if !(F==nothing)
 			return ΔF
@@ -27,5 +50,11 @@ end
 function construct_objective(params::AbstractParams, psamples::DArray{TupType, 1, Vector{TupType}}, bs0)
     @assert get_length(params)==length(bs0)
 	fg! = bfgsObjFunc(params, G_Cash(params), psamples)
+    return OnceDifferentiable(only_fg!(fg!), bs0)
+end
+
+function construct_objective(params::AbstractParams, psamples::DArray{TupType, 1, Vector{TupType}}, bs0, ω₀::Float64)
+    @assert get_length(params)==length(bs0)
+    fg! = bfgsObjFunc_repul(params, G_Cash(params), psamples, GaugeRepulsion(params, ω₀))
     return OnceDifferentiable(only_fg!(fg!), bs0)
 end

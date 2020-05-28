@@ -12,6 +12,7 @@ import Base: ==, <, >, <=, >=
 
 
 include("parameters.jl")
+include("repulsion.jl")
 #include("supplementary_functions.jl")
 #include("initial_conditions.jl")
 include("matrices.jl")
