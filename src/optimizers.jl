@@ -247,10 +247,10 @@ end
 
 ########################
 
-function get_optimum(k::Float64, m::Int64, N::Int64, a::Float64, rdisp::ReducedDispersion, opt::Optim.Options, int_rtol::Real=1e-6, limits::Int64 = 200)
+function get_optimum(k::Float64, m::Union{Int64, Nothing}, N::Int64, a::Float64, rdisp::ReducedDispersion, opt::Optim.Options, int_rtol::Real=1e-6, limits::Int64 = 200)
 	t′ = -time()
 	psamples_raw = get_psamples(rdisp, int_rtol, limits)
-	psamples = widen(psamples_raw, Float128(4*m*K(k^2)), 1.0)|>separate_psamples
+	psamples = widen(psamples_raw, 4*K(k^2), m)|>separate_psamples
 	Nₚ = length(psamples_raw)
 	@info "Number of ε⁻ points is: $Nₚ.\n\n"
     params = ParamsB1(N, m, k, a, psamples_raw)
@@ -304,12 +304,29 @@ function km_walkthrough(k_range::AbstractVector, m_range::AbstractVector, N::Int
         @info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m) = ($k, $m). This run took $(t2-t1) s.\n\n\n\n"
     end
 end
+function km_walkthrough′(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200)
+    tups = vec([tup for tup in product(k_range, m_range)])
+    N_tot = length(tups)
+    t0 = time()
+    for i in eachindex(tups)
+        t1 = time()
+        k, m = tups[i]
+        @info "I am currently dealing with $i-th tuple of (k, m), which is (k, m) = ($k, $m).\n\n"
+		f_seed, bs_seed, f_final, bs_final, τs = get_optimum(k, m, N, a, rdisp, opt, int_rtol, limits)
+		jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
+			@stash!(file, k, m, N, a, rdisp, opt, int_rtol, limits, f_seed, bs_seed, f_final, bs_final, τs)
+		end
+		saver_o.iter += 1
+        t2 = time()
+        @info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m) = ($k, $m). This run took $(t2-t1) s.\n\n\n\n"
+    end
+end
 
-export km_walkthrough
+export km_walkthrough, km_walkthrough′
 
-function get_optimum(k::Float64, m::Int64, N::Int64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}}, opt::Optim.Options, int_rtol::Real=1e-6, limits::Int64 = 200)
+function get_optimum(k::Float64, m::Union{Int64, Nothing}, N::Int64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}}, opt::Optim.Options, int_rtol::Real=1e-6, limits::Int64 = 200)
 	t′ = -time()
-	psamples = widen(psamples_raw, Float128(4*m*K(k^2)), 1.0)|>separate_psamples
+	psamples = widen(psamples_raw, 4*K(k^2), m)|>separate_psamples
 	Nₚ = length(psamples_raw)
 	@info "Number of ε⁻ points is: $Nₚ.\n\n"
     params = ParamsB1_pinned(N, m, k, a, psamples_raw)
@@ -335,7 +352,7 @@ end
 
 const IRange{T} = Union{AbstractVector{T}, T}
 
-function km_walkthrough0(ks::IRange{Float64}, ms::IRange{Int64}, Ns::IRange{Int64}, as::IRange{Float64}, ε⁻s::IRange{Float64}, μs::IRange{Float64}, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200)
+function km_walkthrough0(ks::IRange{Float64}, ms::AbstractVector, Ns::IRange{Int64}, as::IRange{Float64}, ε⁻s::IRange{Float64}, μs::IRange{Float64}, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200)
 	tups = [tup for tup in product(ks, ms, Ns, as, ε⁻s, μs)] |> vec
     N_tot = length(tups)
     t0 = time()

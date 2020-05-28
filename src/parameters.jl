@@ -1,82 +1,82 @@
-abstract type AbstractParams end
-abstract type AbstractParamsB1 <: AbstractParams end
-abstract type AbstractParamsNoB1 <: AbstractParams end
-abstract type AbstractParamsB1B3 <: AbstractParamsB1 end
+abstract type AbstractParams{T<:Union{Int64,Nothing}} end
+abstract type AbstractParamsB1{T<:Union{Int64,Nothing}} <: AbstractParams{T} end
+abstract type AbstractParamsNoB1{T<:Union{Int64,Nothing}} <: AbstractParams{T} end
+abstract type AbstractParamsB1B3{T<:Union{Int64,Nothing}} <: AbstractParamsB1{T} end
 
 abstract type AbstractDispersion end
 abstract type AbstractSharedCash end
 
-struct ParamsB1 <: AbstractParamsB1
+struct ParamsB1{T<:Union{Int64, Nothing}} <: AbstractParamsB1{T}
     N::Int64
-    m::Int64
+    m::T
     W::Float64
     u::Float64
     u₁::Float64
     Δτ::Float64
-    ParamsB1(N, m, W, u, u₁) = new(N, m, W, u, u₁, W/N)
+	ParamsB1(N, m::T, W, u, u₁) where T<:Union{Int64, Nothing} = new{T}(N, m, W, u, u₁, W/N)
 end
 
-struct ParamsB1B3 <: AbstractParamsB1B3
+struct ParamsB1B3{T<:Union{Int64, Nothing}} <: AbstractParamsB1B3{T}
     N::Int64
-    m::Int64
+    m::T
     W::Float64
     u::Float64
     u₁::Float64
 	u₃::Float64
     Δτ::Float64
-    ParamsB1B3(N, m, W, u, u₁, u₃) = new(N, m, W, u, u₁, u₃, W/N)
+	ParamsB1B3(N, m::T, W, u, u₁, u₃) where T<:Union{Int64, Nothing} = new{T}(N, m, W, u, u₁, u₃, W/N)
 end
 
-struct ParamsB3 <: AbstractParamsB1B3
+struct ParamsB3{T<:Union{Int64, Nothing}} <: AbstractParamsB1B3{T}
     N::Int64
-    m::Int64
+    m::T
     W::Float64
     u::Float64
 	u₁::Float64
 	u₃::Float64
     Δτ::Float64
-    ParamsB3(N, m, W, u, u₁, u₃) = new(N, m, W, u, u₁, u₃, W/N)
+	ParamsB3(N, m::T, W, u, u₁, u₃) where {T<:Union{Int64, Nothing}} = new{T}(N, m, W, u, u₁, u₃, W/N)
 end
 
-struct ParamsB1_pinned <: AbstractParamsB1
+struct ParamsB1_pinned{T<:Union{Int64, Nothing}} <: AbstractParamsB1{T}
     N::Int64
-    m::Int64
+    m::T
     W::Float64
     u::Float64
     u₁::Float64
     Δτ::Float64
 	i_pinned::Int64
-	ParamsB1_pinned(N::Int64, m::Int64, W::Float64, u::Float64, u₁::Float64) = new(N, m, W, u, u₁, W/N, div(N,2)+1)
+	ParamsB1_pinned(N::Int64, m::T, W::Float64, u::Float64, u₁::Float64) where T<:Union{Int64, Nothing} = new{T}(N, m, W, u, u₁, W/N, div(N,2)+1)
 end
 
-struct ParamsB1_pinned² <: AbstractParamsB1
+struct ParamsB1_pinned²{T<:Union{Int64, Nothing}} <: AbstractParamsB1{T}
     N::Int64
-    m::Int64
+    m::T
     W::Float64
     u::Float64
     u₁::Float64
     Δτ::Float64
 	i_pinned::Int64
-	ParamsB1_pinned²(N::Int64, m::Int64, W::Float64, u::Float64, u₁::Float64) = new(N, m, W, u, u₁, W/N, div(N,2)+1)
+	ParamsB1_pinned²(N::Int64, m::T, W::Float64, u::Float64, u₁::Float64) where T<:Union{Int64, Nothing} = new{T}(N, m, W, u, u₁, W/N, div(N,2)+1)
 end
 
-struct ParamsNoB1 <: AbstractParamsNoB1
+struct ParamsNoB1{T<:Union{Int64, Nothing}} <: AbstractParamsNoB1{T}
     N::Int64
-    m::Int64
+    m::T
     W::Float64
     u::Float64
     Δτ::Float64
-    ParamsNoB1(N, m, W, u) = new(N, m, W, u, W/N)
+	ParamsNoB1(N, m::T, W, u) where T<:Union{Int64, Nothing} = new{T}(N, m, W, u, W/N)
 end
 
-struct ParamsNoB1_pinned <: AbstractParamsNoB1
+struct ParamsNoB1_pinned{T<:Union{Int64, Nothing}} <: AbstractParamsNoB1{T}
     N::Int64
-    m::Int64
+    m::T
     W::Float64
     u::Float64
     Δτ::Float64
 	i_pinned::Int64
-    ParamsNoB1_pinned(N::Int64, m::Int64, W::Float64, u::Float64) = new(N, m, W, u, W/N, div(N,2)+1)
+	ParamsNoB1_pinned(N::Int64, m::T, W::Float64, u::Float64) where T<:Union{Int64, Nothing} = new{T}(N, m, W, u, W/N, div(N,2)+1)
 end
 
 function get_u₀(β, psamples_raw)
@@ -87,12 +87,22 @@ function get_u₀(β, psamples_raw)
     end
     return s/4.0
 end
+function get_u₀(psamples_raw)
+    s = 0.0
+	for (εₚ⁺, εₚ⁻, wₚ) in psamples_raw
+        κₚ = sqrt(εₚ⁻^2 + 1.0)
+        s += wₚ/κₚ
+    end
+    return s/2.0
+end
+get_u₀(W, m::Int64, psamples_raw) = get_u₀(W*m, psamples_raw)
+get_u₀(W, m::Nothing, psamples_raw) = get_u₀(psamples_raw)
 
 for Params_constr in (:ParamsB1, :ParamsB1_pinned, :ParamsB1_pinned²)
 	@eval begin
-		function $Params_constr(N::Int64, m::Int64, k::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}})
+		function $Params_constr(N::Int64, m::Union{Int64, Nothing}, k::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}})
             W = 4*K(k^2)
-			u₀ = get_u₀(W*m, psamples_raw)
+			u₀ = get_u₀(W, m, psamples_raw)
 			u₁ = u₀*a
 			return $Params_constr(N + 1 - rem(N, 2), m, W, u₀, u₁)
 		end
@@ -101,9 +111,9 @@ end
 
 for Params_constr in (:ParamsB1B3, :ParamsB3)
 	@eval begin
-		function $Params_constr(N::Int64, m::Int64, k::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}}, a₃ = 1.0)
+		function $Params_constr(N::Int64, m::Union{Int64, Nothing}, k::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}}, a₃ = 1.0)
             W = 4*K(k^2)
-			u₀ = get_u₀(W*m, psamples_raw)
+			u₀ = get_u₀(W, m, psamples_raw)
 			u₁ = u₀*a
 			u₃ = u₀*a₃
 			return $Params_constr(N + 1 - rem(N, 2), m, W, u₀, u₁, u₃)
@@ -113,9 +123,9 @@ end
 
 for Params_constr in Symbol.(subtypes(AbstractParamsNoB1))
 	@eval begin
-		function $Params_constr(N::Int64, m::Int64, k::Float64, psamples_raw::Vector{NTuple{3, Float64}})
+		function $Params_constr(N::Int64, m::Union{Int64, Nothing}, k::Float64, psamples_raw::Vector{NTuple{3, Float64}})
             W = 4*K(k^2)
-			u₀ = get_u₀(W*m, psamples_raw)
+			u₀ = get_u₀(W, m, psamples_raw)
 			return $Params_constr(N + 1 - rem(N, 2), m, W, u₀)
 		end
 	end
@@ -303,9 +313,9 @@ end
 
 #########################################################
 
-
-widen(psamples_raw, β′::Float128) = widen(psamples_raw, β′, one(Float128))
-function widen(psamples_raw::Vector{NTuple{3, Float64}}, β′::Float128, γ)
+widen(psamples_raw, W, m) = widen(psamples_raw, W, m, one(Float128))
+function widen(psamples_raw::Vector{NTuple{3, Float64}}, W::Float64, m::Int64, γ::Float128)
+	β′ = Float128(W)*m
 	psamples_widened = Vector{Tuple{Float64, Float64, Float64, Float128, Float128}}()
 	for psample in psamples_raw
 		εₚ⁺′ = Float128(psample[1])
@@ -316,6 +326,19 @@ function widen(psamples_raw::Vector{NTuple{3, Float64}}, β′::Float128, γ)
 	end
 	return psamples_widened
 end
+
+function widen(psamples_raw::Vector{NTuple{3, Float64}}, W::Float64, m::Nothing, γ::Float128)
+	psamples_widened = Vector{Tuple{Float64, Float64, Float64, Float128, Float128}}()
+	for psample in psamples_raw
+		εₚ⁺′ = Float128(psample[1])
+		κₚ⁰ = sqrt(γ^2 + psample[2]^2)
+		a = W*(εₚ⁺′ - κₚ⁰)
+		b = max(a, zero(Float128))
+		push!(psamples_widened, (psample..., a, b))
+	end
+	return psamples_widened
+end
+
 
 function separate_psamples_old(psamples_raw::Vector{Tuple{Float64,Float64,Float64, Float128, Float128}})
 	np = nprocs()

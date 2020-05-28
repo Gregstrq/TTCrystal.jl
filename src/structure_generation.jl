@@ -171,7 +171,7 @@ function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂²Fₚ::Abstrac
 	return Float64(log((cosh(β′*εₚ⁺) + 0.5*(λ₁′^m + λ₂′^m))/(cosh(β′*εₚ⁺)+cosh(β′*εₚ⁻))))
 end
 
-function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs::AbstractVector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ, a, b)
+function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs::AbstractVector{Float64}, params::AbstractParams{Int64}, εₚ⁺, εₚ⁻, wₚ, a, b)
 	N₀, N, m = length(bs), params.N, params.m
 	U = compute_single_period!(∂U, U_cash, process_bs(bs, params), εₚ⁻, params.Δτ)
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
@@ -186,13 +186,36 @@ function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂U::AbstractVect
     return Float64(wₚ*(log(abs(Fₚ))-b)/m)
 end
 
-function compute_full_span(bs::Vector{Float64}, params::AbstractParams, εₚ⁺, εₚ⁻, wₚ, a, b)
+function compute_full_span!(∂Fₚ::AbstractVector{Float64}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs::AbstractVector{Float64}, params::AbstractParams{Nothing}, εₚ⁺, εₚ⁻, wₚ, a, b)
+	N₀, N, m = length(bs), params.N, params.m
+	U = compute_single_period!(∂U, U_cash, process_bs(bs, params), εₚ⁻, params.Δτ)
+	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
+	Fₚ⁰ = log(abs(λ₁))
+	if Fₚ⁰>=a
+		Fₚ⁻¹ = 1/λ₁
+		for i = 1:N₀
+			∂Uⁱₛ = S⁻¹*∂U[i]*S
+			∂Fₚ[i] += wₚ*Fₚ⁻¹*real(∂Uⁱₛ[1,1])
+		end
+		return Float64(wₚ*(Fₚ⁰ - b))
+	else
+		return Float64(wₚ*(a - b))
+	end
+end
+
+function compute_full_span(bs::Vector{Float64}, params::AbstractParams{Int64}, εₚ⁺, εₚ⁻, wₚ, a, b)
 	m, N = params.m, params.N
 	U = compute_ordered_exp(process_bs(bs, params), εₚ⁻, params.Δτ)
 	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
     return Float64(wₚ*(log(abs(a + (λ₁^m + λ₂^m)))-b)/m)
 end
 
+function compute_full_span(bs::Vector{Float64}, params::AbstractParams{Nothing}, εₚ⁺, εₚ⁻, wₚ, a, b)
+	m, N = params.m, params.N
+	U = compute_ordered_exp(process_bs(bs, params), εₚ⁻, params.Δτ)
+	λ₁, λ₂, S, S⁻¹ = custom_eigen(U)
+	return Float64(wₚ*(max(log(abs(λ₁)), a) - b))
+end
 ############################
 
 function process_chunk!(∂F::AbstractVector{Float64}, ∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs, params::AbstractParams, psamples::AbstractVector{Tuple{Float64, Float64, Float64, Float128, Float128}})
