@@ -6,11 +6,11 @@ struct bfgsObjFunc{pType<:AbstractParams}
     psamples::DArray{TupType, 1, Vector{TupType}}
 end
 
-struct bfgsObjFunc_repul{pType<:AbstractParams}
+struct bfgsObjFunc_repul{pType<:AbstractParams, GT<:AbstractRepulsion}
 	params::pType
 	g_cash::G_Cash
     psamples::DArray{TupType, 1, Vector{TupType}}
-    grep::GaugeRepulsion
+    grep::GT
 end
 
 
@@ -55,6 +55,6 @@ end
 
 function construct_objective(params::AbstractParams, psamples::DArray{TupType, 1, Vector{TupType}}, bs0, ω₀::Float64)
     @assert get_length(params)==length(bs0)
-    fg! = bfgsObjFunc_repul(params, G_Cash(params), psamples, GaugeRepulsion(params, ω₀))
+    fg! = bfgsObjFunc_repul(params, G_Cash(params), psamples, GaugeRepulsion2(params, ω₀))
     return OnceDifferentiable(only_fg!(fg!), bs0)
 end

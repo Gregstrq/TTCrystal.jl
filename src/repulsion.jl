@@ -19,11 +19,24 @@ struct GaugeRepulsion <: AbstractRepulsion
                 M[i,j] = kernel_func(τs[i], τs[j], W, c)
             end
         end
-        print(c, "\n")
+        #print(c, "\n")
         new(fs, M, N)
     end
 end
 
+struct GaugeRepulsion2 <: AbstractRepulsion
+	fs::Vector{Float64}
+	ηs::Vector{Float64}
+	N::Int64
+	c::Float64
+	function GaugeRepulsion2(params::AbstractParams, ω₀::Float64)
+        W, N, u, Δτ = params.W, params.N, params.u, params.Δτ
+        c = 2u*ω₀^2*Δτ^2
+        fs = zeros(Float64, N)
+		ηs = zeros(Float64, N)
+		new(fs, ηs, N, c)
+	end
+end
 
 function compute_repulsion!(grep::GaugeRepulsion, bs::AbstractVector)
     fs, M, N = grep.fs, grep.M, grep.N
@@ -32,4 +45,25 @@ function compute_repulsion!(grep::GaugeRepulsion, bs::AbstractVector)
     return 0.5*dot(fs,b0), fs
 end
 
-export GaugeRepulsion, compute_repulsion!
+function compute_repulsion!(grep::GaugeRepulsion2, bs::AbstractVector)
+	fs, ηs, N, c = grep.fs, grep.ηs, grep.N, grep.c
+	b0 = view(bs, 1:N)
+	##
+	ηs[1] = N*b0[1]
+	@inbounds for i = 1:N-1
+		ηs[1] += i*b0[i+1]
+	end
+	ηs[1] /= N
+	for i = 2:N
+		ηs[i] = ηs[i-1] + b0[i]
+	end
+	##
+	fs[N] = ηs[N]*c
+	for i = N-1:-1:2
+		fs[i] = fs[i+1] + c*ηs[i]
+	end
+	##
+	return 0.5*dot(fs, b0), fs
+end
+
+export GaugeRepulsion, GaugeRepulsion2, compute_repulsion!

@@ -384,7 +384,7 @@ function get_optimum(k::Float64, m::Union{Int64, Nothing}, N::Int64, a::Float64,
     params = ParamsB1(N, m, k, a, psamples_raw)
     params0 = ParamsNoB1(params.N, params.m, params.W, params.u)
     ####
-    f_nm = precompute_step(zeros(N), params, psamples)
+    f_nm = precompute_step(zeros(N), params0, psamples)
     @info "Free energy of normal metal: $(f_nm).\n\n"
 	####
     τs = get_τs(params0)
@@ -408,14 +408,14 @@ function get_optimum(k::Float64, m::Union{Int64, Nothing}, N::Int64, a::Float64,
     return f_nm, f_seed, bs_seed, f_final, bs_final, τs
 end
 
-function km_walkthrough(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, ω₀::Float64, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200)
+function km_walkthrough_repul(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, ω₀::Float64, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200)
     tups = vec([tup for tup in product(k_range, m_range)])
     N_tot = length(tups)
     t0 = time()
     for i in eachindex(tups)
         t1 = time()
         k, m = tups[i]
-        @info "I am currently dealing with $i-th tuple of (k, m), which is (k, m) = ($k, $m).\n\n"
+		@info "I am currently dealing with $i-th tuple of (k, m), which is (k, m) = ($k, $(trm(m))).\n\n"
         try
             f_nm, f_seed, bs_seed, f_final, bs_final, τs = get_optimum(k, m, N, a, ω₀, rdisp, opt, int_rtol, limits)
 			jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
@@ -432,6 +432,29 @@ function km_walkthrough(k_range::AbstractVector, m_range::AbstractVector, N::Int
 			saver_o.iter += 1
         end
         t2 = time()
-        @info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m) = ($k, $m). This run took $(t2-t1) s.\n\n\n\n"
+		@info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m) = ($k, $(trm(m))). This run took $(t2-t1) s.\n\n\n\n"
     end
 end
+
+function km_walkthrough_repul′(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, ω₀_range::IRange{Float64}, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200)
+    tups = vec([tup for tup in product(k_range, m_range, ω₀_range)])
+    N_tot = length(tups)
+    t0 = time()
+    for i in eachindex(tups)
+        t1 = time()
+        k, m, ω₀ = tups[i]
+		@info "I am currently dealing with $i-th tuple of (k, m, ω₀), which is (k, m, ω₀) = ($k, $(trm(m)), $ω₀).\n\n"
+		f_nm, f_seed, bs_seed, f_final, bs_final, τs = get_optimum(k, m, N, a, ω₀, rdisp, opt, int_rtol, limits)
+		jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
+			@stash!(file, k, m, N, a, ω₀, rdisp, opt, int_rtol, limits, f_nm, f_seed, bs_seed, f_final, bs_final, τs)
+		end
+		saver_o.iter += 1
+        t2 = time()
+		@info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m, ω₀) = ($k, $(trm(m)), ω₀). This run took $(t2-t1) s.\n\n\n\n"
+    end
+end
+
+trm(m) = m
+trm(::Nothing) = "Inf"
+
+export km_walkthrough_repul′
