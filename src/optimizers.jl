@@ -440,6 +440,38 @@ function get_optimum2(k::Float64, m::Union{Int64, Nothing}, N::Int64, a::Float64
 	#@info "Free energy with b1 is $f_final. Calculation took $t′ s.\n\n"
     return f_nm, f_seed, bs_seed, τs
 end
+function get_optimum2(k::Float64, m::Union{Int64, Nothing}, N::Int64, a::Float64, reptyp::AbstractRepulsionType, rdisp::ReducedDispersion, opt::Optim.Options, int_rtol::Real=1e-6, limits::Int64 = 200)
+	t′ = -time()
+	psamples_raw = get_psamples(rdisp, int_rtol, limits)
+	psamples = widen(psamples_raw, 4*K(k^2), m)|>separate_psamples
+	Nₚ = length(psamples_raw)
+	@info "Number of ε⁻ points is: $Nₚ.\n\n"
+    params = ParamsB1(N, m, k, a, psamples_raw)
+    params0 = ParamsNoB1(params.N, params.m, params.W, params.u)
+    ####
+    f_nm = precompute_step(zeros(N), params0, psamples)
+    @info "Free energy of normal metal: $(f_nm).\n\n"
+	####
+    τs = get_τs(params0)
+    bs0 = get_bs(τs, k)
+	d0 = construct_objective(params0, psamples, bs0, reptyp)
+	results0 = optimize(d0, bs0, LBFGS(m=120, linesearch = LineSearches.MoreThuente()), opt)
+	f_seed = Optim.minimum(results0)
+	bs_seed = Optim.minimizer(results0)
+    #bs_seed′ = zeros(get_length(params))
+    #bs_seed′[1:params.N] .= bs_seed
+	#t′ += time()
+	@info "Free energy of without b1 is $f_seed. Calculation took $t′ s.\n\n"
+	####
+	#t′ = -time()
+	#d = construct_objective(params, psamples, bs_seed′, ω₀)
+	#results = optimize(d, bs_seed′, LBFGS(m=120, linesearch = LineSearches.MoreThuente()), opt)
+	#f_final = Optim.minimum(results)
+	#bs_final = Optim.minimizer(results)
+	#t′ += time()
+	#@info "Free energy with b1 is $f_final. Calculation took $t′ s.\n\n"
+    return f_nm, f_seed, bs_seed, τs
+end
 
 function km_walkthrough_repul(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, ω₀::Float64, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200)
     tups = vec([tup for tup in product(k_range, m_range)])
@@ -476,14 +508,31 @@ function km_walkthrough_repul2(k_range::AbstractVector, m_range::AbstractVector,
     for i in eachindex(tups)
         t1 = time()
         k, m, ω₀ = tups[i]
-		@info "I am currently dealing with $i-th tuple of (k, m), which is (k, m) = ($k, $(trm(m))).\n\n"
+		@info "I am currently dealing with $i-th tuple of (k, m, ω₀), which is (k, m, ω₀) = ($k, $(trm(m)), $ω₀).\n\n"
 		f_nm, f_seed, bs_seed, τs = get_optimum2(k, m, N, a, ω₀, rdisp, opt, int_rtol, limits)
 		jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
 			@stash!(file, k, m, N, a, ω₀, rdisp, opt, int_rtol, limits, f_nm, f_seed, bs_seed, τs)
 		end
 		saver_o.iter += 1
         t2 = time()
-		@info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m) = ($k, $(trm(m))). This run took $(t2-t1) s.\n\n\n\n"
+		@info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m, ω₀) = ($k, $(trm(m)), $ω₀). This run took $(t2-t1) s.\n\n\n\n"
+    end
+end
+function km_walkthrough_repul2(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, reptyp_range::IRange{T}, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200) where {T<:AbstractRepulsionType}
+    tups = vec([tup for tup in product(k_range, m_range, reptyp_range)])
+    N_tot = length(tups)
+    t0 = time()
+    for i in eachindex(tups)
+        t1 = time()
+        k, m, reptyp = tups[i]
+		@info "I am currently dealing with $i-th tuple of (k, m, reptyp), which is (k, m, reptyp) = ($k, $(trm(m)), $reptyp).\n\n"
+		f_nm, f_seed, bs_seed, τs = get_optimum2(k, m, N, a, reptyp, rdisp, opt, int_rtol, limits)
+		jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
+			@stash!(file, k, m, N, a, reptyp, rdisp, opt, int_rtol, limits, f_nm, f_seed, bs_seed, τs)
+		end
+		saver_o.iter += 1
+        t2 = time()
+		@info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m, reptyp) = ($k, $(trm(m)), $reptyp). This run took $(t2-t1) s.\n\n\n\n"
     end
 end
 

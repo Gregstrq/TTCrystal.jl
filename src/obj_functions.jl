@@ -58,3 +58,8 @@ function construct_objective(params::AbstractParams, psamples::DArray{TupType, 1
     fg! = bfgsObjFunc_repul(params, G_Cash(params), psamples, GaugeRepulsion2(params, ω₀))
     return OnceDifferentiable(only_fg!(fg!), bs0)
 end
+function construct_objective(params::AbstractParams, psamples::DArray{TupType, 1, Vector{TupType}}, bs0, reptyp::AbstractRepulsionType)
+    @assert get_length(params)==length(bs0)
+    fg! = bfgsObjFunc_repul(params, G_Cash(params), psamples, construct_repulsion(reptyp, params))
+    return OnceDifferentiable(only_fg!(fg!), bs0)
+end
