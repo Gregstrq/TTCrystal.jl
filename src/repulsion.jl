@@ -19,7 +19,7 @@ struct GaugeRepulsion <: AbstractRepulsion
                 M[i,j] = kernel_func(τs[i], τs[j], W, c)
             end
         end
-        print(c, "\n")
+        #print(c, "\n")
         new(fs, M, N)
     end
 end
@@ -32,7 +32,7 @@ struct GaugeRepulsion2 <: AbstractRepulsion
 	function GaugeRepulsion2(params::AbstractParams, ω₀::Float64)
         W, N, u, Δτ = params.W, params.N, params.u, params.Δτ
         c = 2u*ω₀^2*Δτ^3
-        print(c, "\n")
+        #print(c, "\n")
         fs = zeros(Float64, N)
 		ηs = zeros(Float64, N)
 		new(fs, ηs, N, c)
