@@ -95,6 +95,14 @@ function get_u₀(psamples_raw)
     end
     return s/2.0
 end
+function get_u₀(psamples_raw, γ)
+    s = 0.0
+	for (εₚ⁺, εₚ⁻, wₚ) in psamples_raw
+        κₚ = sqrt(εₚ⁻^2 + γ^2)
+        s += wₚ/κₚ
+    end
+    return s/2.0
+end
 get_u₀(W, m::Int64, psamples_raw) = get_u₀(W*m, psamples_raw)
 get_u₀(W, m::Nothing, psamples_raw) = get_u₀(psamples_raw)
 
@@ -279,7 +287,8 @@ function get_quadrature(rdisp::ReducedDispersion, rtol::Float64 = 1e-6, limit::I
 		I, E, segs = quadgk_custom(f, P-Λ, P+Λ, P; rtol = rtol, limit=limit)
 	end
 	x₁, w₁, x₂, w₂ = construct_quadrature(segs)
-	return x₂, w₂./(α*2*π^2)
+    w₂ .*= wfunc_gauss.((x₂.-P)./Λ)./(α*2*π^2)
+	return x₂, w₂
 end
 
 function get_psamples(rdisp::ReducedDispersion, rtol::Float64 = 1e-6, limit::Int64 = 200)
@@ -420,3 +429,40 @@ function get_psamples_simple(disp::Dispersion, Nₜ, Nᵩ)
 end
 
 get_psamples(disp::Dispersion, Nₜ, Nᵩ) = get_psamples_simple(disp, Nₜ, Nᵩ)
+
+###############
+
+function get_static_energy(a₂, rdisp, int_rtol::Real=1e-6, limits::Int64 = 200)
+	psamples_raw = get_psamples(rdisp, int_rtol, limits)
+    u′ = get_u₀(psamples_raw)
+    u′′ = u′*(1+a₂)
+    g = find_zero(x -> (u′′ - get_u₀(psamples_raw, x)), (1e-20, 1e20)) 
+    s = 0.0
+	for (εₚ⁺, εₚ⁻, wₚ) in psamples_raw
+        s += wₚ*(abs(εₚ⁻) - sqrt(εₚ⁻^2 + g^2))
+    end
+    s += g^2*u′′
+end
+
+export get_static_energy
+
+θₕ(x) = x>0.0 ? 1.0 : 0.0
+
+function get_u₀_quad(rdisp, γ²)
+    α, P, μₐ, Λ = rdisp.α, rdisp.P, abs(rdisp.μ), rdisp.Λ
+    f(x) = θₕ(sqrt(x^2 + γ²) - μₐ)*wfunc_gauss((x-P)/Λ)/(sqrt(x^2 + γ²)*4α*π^2)
+    return quadgk_custom(f, P-Λ, P, P+Λ; rtol = 1e-6)[1]
+end
+function calc_se_quad(rdisp, γ², u)
+    α, P, μₐ, Λ = rdisp.α, rdisp.P, abs(rdisp.μ), rdisp.Λ
+    f(x) = wfunc_gauss((x-P)/Λ)*(max(μₐ, abs(x)) - max(μₐ, sqrt(x^2 + γ²)))/(2α*π^2)
+    return quadgk(f, P-Λ, P, P+Λ)[1] + u*γ²
+end
+function get_static_energy_quad(a₂, rdisp)
+    u = get_u₀_quad(rdisp, 1.0)
+    u′ = u*(1+a₂)
+    γ² = find_zero(x -> (u′ - get_u₀_quad(rdisp, x)), (1e-30, 1e30))
+    return calc_se_quad(rdisp, γ², u′)
+end
+
+export get_static_energy_quad
