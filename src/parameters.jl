@@ -79,7 +79,7 @@ struct ParamsNoB1_pinned{T<:Union{Int64, Nothing}} <: AbstractParamsNoB1{T}
 	ParamsNoB1_pinned(N::Int64, m::T, W::Float64, u::Float64) where T<:Union{Int64, Nothing} = new{T}(N, m, W, u, W/N, div(N,2)+1)
 end
 
-function get_u₀(β, psamples_raw)
+function get_u₀(β::AbstractFloat, psamples_raw::Vector{NTuple{3, Float64}})
     s = 0.0
 	for (εₚ⁺, εₚ⁻, wₚ) in psamples_raw
         κₚ = sqrt(εₚ⁻^2 + 1.0)
@@ -95,7 +95,7 @@ function get_u₀(psamples_raw)
     end
     return s/2.0
 end
-function get_u₀(psamples_raw, γ)
+function get_u₀(psamples_raw::Vector{NTuple{3, Float64}}, γ::AbstractFloat)
     s = 0.0
 	for (εₚ⁺, εₚ⁻, wₚ) in psamples_raw
         κₚ = sqrt(εₚ⁻^2 + γ^2)
