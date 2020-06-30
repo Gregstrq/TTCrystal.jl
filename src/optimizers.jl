@@ -423,7 +423,7 @@ function get_optimum2(k::Float64, m::Union{Int64, Nothing}, N::Int64, a::Float64
     τs = get_τs(params0)
     bs0 = get_bs(τs, k)
 	d0 = construct_objective(params0, psamples, bs0, ω₀)
-	results0 = optimize(d0, bs0, LBFGS(m=120, linesearch = LineSearches.MoreThuente()), opt)
+	results0 = optimize(d0, bs0, BFGS(linesearch = LineSearches.MoreThuente()), opt)
 	f_seed = Optim.minimum(results0)
 	bs_seed = Optim.minimizer(results0)
     #bs_seed′ = zeros(get_length(params))
@@ -472,6 +472,69 @@ function get_optimum2(k::Float64, m::Union{Int64, Nothing}, N::Int64, a::Float64
 	#@info "Free energy with b1 is $f_final. Calculation took $t′ s.\n\n"
     return f_nm, f_seed, bs_seed, τs
 end
+function get_optimum3(k::Float64, m::Union{Int64, Nothing}, N::Int64, a::Float64, reptyp::AbstractRepulsionType, rdisp::ReducedDispersion, opt::Optim.Options, int_rtol::Real=1e-6, limits::Int64 = 200)
+	t′ = -time()
+	psamples_raw = get_psamples(rdisp, int_rtol, limits)
+	psamples = widen(psamples_raw, 4*K(k^2), m)|>separate_psamples
+	Nₚ = length(psamples_raw)
+	@info "Number of ε⁻ points is: $Nₚ.\n\n"
+    params = ParamsB1(N, m, k, a, psamples_raw)
+    params0 = ParamsNoB1(params.N, params.m, params.W, params.u)
+    ####
+    f_nm = precompute_step(zeros(N), params0, psamples)
+    @info "Free energy of normal metal: $(f_nm).\n\n"
+	####
+    τs = get_τs(params0)
+    #bs0 = get_bs(τs, k)
+	#d0 = construct_objective(params0, psamples, bs0, reptyp)
+	#results0 = optimize(d0, bs0, LBFGS(m=120, linesearch = LineSearches.MoreThuente()), opt)
+	#f_seed = Optim.minimum(results0)
+	#bs_seed = Optim.minimizer(results0)
+    #bs_seed′ = zeros(get_length(params))
+    #bs_seed′[1:params.N] .= bs_seed
+	#t′ += time()
+	#@info "Free energy of without b1 is $f_seed. Calculation took $t′ s.\n\n"
+	####
+	t′ = -time()
+	bs_seed′ = get_bs(params, k)
+	d = construct_objective(params, psamples, bs_seed′, reptyp)
+	results = optimize(d, bs_seed′, LBFGS(m=120, linesearch = LineSearches.MoreThuente()), opt)
+	f_final = Optim.minimum(results)
+	bs_final = Optim.minimizer(results)
+	t′ += time()
+	@info "Free energy with b1 is $f_final. Calculation took $t′ s.\n\n"
+    return f_nm, f_final, bs_final, τs
+end
+function clarify_optimum3(opt::Optim.Options, file, saver_o::Saver)
+	data = load(file)
+	k = data["k"]
+	m = data["m"]
+	N = data["N"]
+	a = data["a"]
+	reptyp = data["reptyp"]
+	rdisp = data["rdisp"]
+	int_rtol = data["int_rtol"]
+	limits = data["limits"]
+	f_nm = data["f_nm"]
+	τs = data["τs"]
+	bs_seed′ = data["bs_final"]
+	psamples_raw = get_psamples(rdisp, int_rtol, limits)
+	psamples = widen(psamples_raw, 4*K(k^2), m)|>separate_psamples
+	Nₚ = length(psamples_raw)
+	@info "Number of ε⁻ points is: $Nₚ.\n\n"
+    params = ParamsB1(N, m, k, a, psamples_raw)
+    params0 = ParamsNoB1(params.N, params.m, params.W, params.u)
+	t′ = -time()
+	d = construct_objective(params, psamples, bs_seed′, reptyp)
+	results = optimize(d, bs_seed′, LBFGS(m=120, linesearch = LineSearches.MoreThuente()), opt)
+	f_final = Optim.minimum(results)
+	bs_final = Optim.minimizer(results)
+	jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
+		@stash!(file, k, m, N, a, reptyp, rdisp, opt, int_rtol, limits, f_nm, f_final, bs_final, τs)
+	end
+	t′ += time()
+	@info "Free energy with b1 is $f_final. Calculation took $t′ s.\n\n"
+end
 
 function km_walkthrough_repul(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, ω₀::Float64, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200)
     tups = vec([tup for tup in product(k_range, m_range)])
@@ -501,8 +564,9 @@ function km_walkthrough_repul(k_range::AbstractVector, m_range::AbstractVector, 
     end
 end
 
-function km_walkthrough_repul2(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, ω₀_range::IRange{Float64}, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200)
-    tups = vec([tup for tup in product(k_range, m_range, ω₀_range)])
+function km_walkthrough_repul2(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, ω₀_range::IRange{Float64}, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200, i₀::Int64 = 1)
+	saver_o.iter = i₀
+	tups = vec([tup for tup in product(k_range, m_range, ω₀_range)])[i₀:end]
     N_tot = length(tups)
     t0 = time()
     for i in eachindex(tups)
@@ -535,6 +599,36 @@ function km_walkthrough_repul2(k_range::AbstractVector, m_range::AbstractVector,
 		@info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m, reptyp) = ($k, $(trm(m)), $reptyp). This run took $(t2-t1) s.\n\n\n\n"
     end
 end
+function km_walkthrough_repul3(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, reptyp_range::IRange{T}, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200) where {T<:AbstractRepulsionType}
+    tups = vec([tup for tup in product(k_range, m_range, reptyp_range)])
+    N_tot = length(tups)
+    t0 = time()
+    for i in eachindex(tups)
+        t1 = time()
+        k, m, reptyp = tups[i]
+		@info "I am currently dealing with $i-th tuple of (k, m, reptyp), which is (k, m, reptyp) = ($k, $(trm(m)), $reptyp).\n\n"
+		f_nm, f_final, bs_final, τs = get_optimum3(k, m, N, a, reptyp, rdisp, opt, int_rtol, limits)
+		jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
+			@stash!(file, k, m, N, a, reptyp, rdisp, opt, int_rtol, limits, f_nm, f_final, bs_final, τs)
+		end
+		saver_o.iter += 1
+        t2 = time()
+		@info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m, reptyp) = ($k, $(trm(m)), $reptyp). This run took $(t2-t1) s.\n\n\n\n"
+    end
+end
+function clarify_walkthrough3(opt::Optim.Options, old_dir::AbstractString, new_dir::AbstractString)
+	saver_o = Saver(new_dir)
+	files = get_files_in_dir(old_dir)
+	L = length(files)
+	t0 = time()
+	for i in eachindex(files)
+		file = files[i]
+		@info "I am currently dealing with $i-th clarification run out of $L.\n\n"
+		clarify_optimum3(opt, file, saver_o)
+		saver_o.iter += 1
+		@info "I am $(time()-t0) into computation. Finished $i-th clarification run out of $L.\n\n"
+	end
+end
 
 function km_walkthrough_repul′(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, ω₀_range::IRange{Float64}, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200)
     tups = vec([tup for tup in product(k_range, m_range, ω₀_range)])
@@ -557,4 +651,16 @@ end
 trm(m) = m
 trm(::Nothing) = "Inf"
 
-export km_walkthrough_repul′, km_walkthrough_repul2
+export km_walkthrough_repul′, km_walkthrough_repul2, km_walkthrough_repul3
+
+extract_number(str::AbstractString) = parse(Int, match(r"\d+", str).match)
+function get_files_in_dir(dir::AbstractString = pwd())
+	curdir = pwd()
+	files = readdir(dir)
+	cd(dir)
+	files = files |> files -> filter(str -> !isnothing(match(r"jld2", str)), files) |> files -> sort!(files; lt = (str1, str2)->isless(extract_number(str1), extract_number(str2)))
+	cd(curdir)
+	return map(file -> "$dir/$file", files)
+end
+
+export clarify_walkthrough3
