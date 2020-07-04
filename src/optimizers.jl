@@ -582,6 +582,23 @@ function km_walkthrough_repul2(k_range::AbstractVector, m_range::AbstractVector,
 		@info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m, ω₀) = ($k, $(trm(m)), $ω₀). This run took $(t2-t1) s.\n\n\n\n"
     end
 end
+function km_walkthrough_repul2′(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, ω₀_range::IRange{Float64}, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200, i₀::Int64 = 1)
+	tups = vec([tup for tup in product(k_range, m_range, ω₀_range)])[1:i₀]
+    N_tot = length(tups)
+    t0 = time()
+    for i in eachindex(tups)
+        t1 = time()
+        k, m, ω₀ = tups[i]
+		@info "I am currently dealing with $i-th tuple of (k, m, ω₀), which is (k, m, ω₀) = ($k, $(trm(m)), $ω₀).\n\n"
+		f_nm, f_seed, bs_seed, τs = get_optimum2(k, m, N, a, ω₀, rdisp, opt, int_rtol, limits)
+		jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
+			@stash!(file, k, m, N, a, ω₀, rdisp, opt, int_rtol, limits, f_nm, f_seed, bs_seed, τs)
+		end
+		saver_o.iter += 1
+        t2 = time()
+		@info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m, ω₀) = ($k, $(trm(m)), $ω₀). This run took $(t2-t1) s.\n\n\n\n"
+    end
+end
 function km_walkthrough_repul2(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, reptyp_range::IRange{T}, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200) where {T<:AbstractRepulsionType}
     tups = vec([tup for tup in product(k_range, m_range, reptyp_range)])
     N_tot = length(tups)
