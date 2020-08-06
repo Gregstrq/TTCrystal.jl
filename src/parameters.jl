@@ -66,7 +66,7 @@ struct ParamsNoB1{T<:Union{Int64, Nothing}} <: AbstractParamsNoB1{T}
     W::Float64
     u::Float64
     Δτ::Float64
-	ParamsNoB1(N, m::T, W, u) where T<:Union{Int64, Nothing} = new{T}(N, m, W, u, W/N)
+	ParamsNoB1(N::Int64, m::T, W::Float64, u::Float64) where T<:Union{Int64, Nothing} = new{T}(N, m, W, u, W/N)
 end
 
 struct ParamsNoB1_pinned{T<:Union{Int64, Nothing}} <: AbstractParamsNoB1{T}
@@ -129,7 +129,7 @@ for Params_constr in (:ParamsB1B3, :ParamsB3)
 	end
 end
 
-for Params_constr in Symbol.(subtypes(AbstractParamsNoB1))
+for Params_constr in (:ParamsNoB1, :ParamsNoB1_pinned)
 	@eval begin
 		function $Params_constr(N::Int64, m::Union{Int64, Nothing}, k::Float64, psamples_raw::Vector{NTuple{3, Float64}})
             W = 4*K(k^2)

@@ -440,6 +440,36 @@ function get_optimum2(k::Float64, m::Union{Int64, Nothing}, N::Int64, a::Float64
 	#@info "Free energy with b1 is $f_final. Calculation took $t′ s.\n\n"
     return f_nm, f_seed, bs_seed, τs
 end
+function clarify_optimum2(opt::Optim.Options, file, saver_o::Saver)
+	data = load(file)
+	k = data["k"]
+	m = data["m"]
+	N = data["N"]
+	a = data["a"]
+	ω₀ = data["ω₀"]
+	rdisp = data["rdisp"]
+	int_rtol = data["int_rtol"]
+	limits = data["limits"]
+	f_nm = data["f_nm"]
+	τs = data["τs"]
+	bs_seed0 = data["bs_seed"]
+	psamples_raw = get_psamples(rdisp, int_rtol, limits)
+	psamples = widen(psamples_raw, 4*K(k^2), m)|>separate_psamples
+	Nₚ = length(psamples_raw)
+	@info "Number of ε⁻ points is: $Nₚ.\n\n"
+    params = ParamsB1(N, m, k, a, psamples_raw)
+    params0 = ParamsNoB1(params.N, params.m, params.W, params.u)
+	t′ = -time()
+	d0 = construct_objective(params0, psamples, bs_seed0, ω₀)
+	results0 = optimize(d0, bs_seed0, LBFGS(m=120, linesearch = LineSearches.MoreThuente()), opt)
+	f_seed = Optim.minimum(results0)
+	bs_seed = Optim.minimizer(results0)
+	jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
+		@stash!(file, k, m, N, a, ω₀, rdisp, opt, int_rtol, limits, f_nm, f_seed, bs_seed, τs)
+	end
+	t′ += time()
+	@info "Free energy without b1 is $f_seed. Calculation took $t′ s.\n\n"
+end
 function get_optimum2(k::Float64, m::Union{Int64, Nothing}, N::Int64, a::Float64, reptyp::AbstractRepulsionType, rdisp::ReducedDispersion, opt::Optim.Options, int_rtol::Real=1e-6, limits::Int64 = 200)
 	t′ = -time()
 	psamples_raw = get_psamples(rdisp, int_rtol, limits)
@@ -582,6 +612,19 @@ function km_walkthrough_repul2(k_range::AbstractVector, m_range::AbstractVector,
 		@info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m, ω₀) = ($k, $(trm(m)), $ω₀). This run took $(t2-t1) s.\n\n\n\n"
     end
 end
+function clarify_walkthrough2(opt::Optim.Options, old_dir::AbstractString, new_dir::AbstractString)
+	saver_o = Saver(new_dir)
+	files = get_files_in_dir(old_dir)
+	L = length(files)
+	t0 = time()
+	for i in eachindex(files)
+		file = files[i]
+		@info "I am currently dealing with $i-th clarification run out of $L.\n\n"
+		clarify_optimum2(opt, file, saver_o)
+		saver_o.iter += 1
+		@info "I am $(time()-t0) into computation. Finished $i-th clarification run out of $L.\n\n"
+	end
+end
 function km_walkthrough_repul2′(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, ω₀_range::IRange{Float64}, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200, i₀::Int64 = 1)
 	tups = vec([tup for tup in product(k_range, m_range, ω₀_range)])[1:i₀]
     N_tot = length(tups)
@@ -680,4 +723,4 @@ function get_files_in_dir(dir::AbstractString = pwd())
 	return map(file -> "$dir/$file", files)
 end
 
-export clarify_walkthrough3
+export clarify_walkthrough3, clarify_walkthrough2
