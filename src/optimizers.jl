@@ -642,8 +642,9 @@ function km_walkthrough_repul2′(k_range::AbstractVector, m_range::AbstractVect
 		@info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m, ω₀) = ($k, $(trm(m)), $ω₀). This run took $(t2-t1) s.\n\n\n\n"
     end
 end
-function km_walkthrough_repul2(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, reptyp_range::IRange{T}, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200) where {T<:AbstractRepulsionType}
-    tups = vec([tup for tup in product(k_range, m_range, reptyp_range)])
+function km_walkthrough_repul2(k_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, reptyp_range::IRange{T}, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200, i₀::Int64 = 1) where {T<:AbstractRepulsionType}
+	saver_o.iter = i₀
+	tups = vec([tup for tup in product(k_range, m_range, reptyp_range)])[i₀:end]
     N_tot = length(tups)
     t0 = time()
     for i in eachindex(tups)

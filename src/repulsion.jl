@@ -69,7 +69,7 @@ end
 
 export GaugeRepulsion, GaugeRepulsion2, compute_repulsion!
 
-full_kernel_dft(r::Int64, α′W::Float64, N::Int64) = tanh(0.5α′W)*sinh(α′W/N)/(cosh(α′W/N) - cos(2π*r/N))
+full_kernel_dft(r::Int64, α′W::Float64, N::Int64) = sinh(α′W/N)/(cosh(α′W/N) - cos(2π*r/N))
 
 full_kernel_func(τ′, τ′′, α′, W) = cosh(α′*(0.5W - abs(τ′ - τ′′)))/sinh(0.5W*α′)
 full_kernel_func2(τ′, τ′′, α′, W) = (exp(-α′*abs(τ′ - τ′′)) + exp(-α′*(W - abs(τ′ - τ′′))))/(1-exp(-α′*W))

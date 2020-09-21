@@ -462,7 +462,7 @@ function get_static_energy_quad(a₂, rdisp)
     u = get_u₀_quad(rdisp, 1.0)
     u′ = u*(1+a₂)
     γ² = find_zero(x -> (u′ - get_u₀_quad(rdisp, x)), (1e-30, 1e30))
-    return calc_se_quad(rdisp, γ², u′)
+    return calc_se_quad(rdisp, γ², u′), γ²
 end
 
 export get_static_energy_quad
