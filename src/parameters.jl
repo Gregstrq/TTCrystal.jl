@@ -110,7 +110,7 @@ for Params_constr in (:ParamsB1, :ParamsB1_pinned, :ParamsB1_pinned²)
 	@eval begin
 		function $Params_constr(N::Int64, m::Union{Int64, Nothing}, k::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}})
             W = 4*K(k^2)
-			u₀ = get_u₀(W, m, psamples_raw)
+			u₀ = get_u₀(W, nothing, psamples_raw)
 			u₁ = u₀*a
 			return $Params_constr(N + 1 - rem(N, 2), m, W, u₀, u₁)
 		end
@@ -121,7 +121,7 @@ for Params_constr in (:ParamsB1B3, :ParamsB3)
 	@eval begin
 		function $Params_constr(N::Int64, m::Union{Int64, Nothing}, k::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}}, a₃ = 1.0)
             W = 4*K(k^2)
-			u₀ = get_u₀(W, m, psamples_raw)
+			u₀ = get_u₀(W, nothing, psamples_raw)
 			u₁ = u₀*a
 			u₃ = u₀*a₃
 			return $Params_constr(N + 1 - rem(N, 2), m, W, u₀, u₁, u₃)
@@ -133,7 +133,7 @@ for Params_constr in (:ParamsNoB1, :ParamsNoB1_pinned)
 	@eval begin
 		function $Params_constr(N::Int64, m::Union{Int64, Nothing}, k::Float64, psamples_raw::Vector{NTuple{3, Float64}})
             W = 4*K(k^2)
-			u₀ = get_u₀(W, m, psamples_raw)
+			u₀ = get_u₀(W, nothing, psamples_raw)
 			return $Params_constr(N + 1 - rem(N, 2), m, W, u₀)
 		end
 	end
@@ -453,9 +453,22 @@ function get_u₀_quad(rdisp, γ²)
     f(x) = θₕ(sqrt(x^2 + γ²) - μₐ)*wfunc_gauss((x-P)/Λ)/(sqrt(x^2 + γ²)*4α*π^2)
     return quadgk_custom(f, P-Λ, P, P+Λ; rtol = 1e-6)[1]
 end
+function get_u₀_quad(rdisp, γ², β)
+    α, P, μₐ, Λ = rdisp.α, rdisp.P, abs(rdisp.μ), rdisp.Λ
+	temp_func(x, μₐ, γ², β) = 0.5*(tanh(0.5β*(μₐ + sqrt(x^2+γ²))) + tanh(0.5β*(sqrt(x^2 + γ²) - μₐ)))
+	f(x) = θₕ(sqrt(x^2 + γ²) - μₐ)*wfunc_gauss((x-P)/Λ)*temp_func(x, μₐ, γ², β)/(sqrt(x^2 + γ²)*4α*π^2)
+    return quadgk_custom(f, P-Λ, P, P+Λ; rtol = 1e-6)[1]
+end
 function calc_se_quad(rdisp, γ², u)
     α, P, μₐ, Λ = rdisp.α, rdisp.P, abs(rdisp.μ), rdisp.Λ
     f(x) = wfunc_gauss((x-P)/Λ)*(max(μₐ, abs(x)) - max(μₐ, sqrt(x^2 + γ²)))/(2α*π^2)
+    return quadgk(f, P-Λ, P, P+Λ)[1] + u*γ²
+end
+function calc_se_quad(rdisp, γ², u, β)
+	β′ = BigFloat(β)
+    α, P, μₐ, Λ = rdisp.α, rdisp.P, abs(rdisp.μ), rdisp.Λ
+	energy_func(x, μₐ, γ², β′) = Float64(log((cosh(β′*μₐ) + cosh(β′*x))/(cosh(β′*μₐ) + cosh(β′*sqrt(x^2 + γ²))))/β′)
+    f(x) = wfunc_gauss((x-P)/Λ)*energy_func(x, μₐ, γ², β′)/(2α*π^2)
     return quadgk(f, P-Λ, P, P+Λ)[1] + u*γ²
 end
 function get_static_energy_quad(a₂, rdisp)
@@ -465,4 +478,24 @@ function get_static_energy_quad(a₂, rdisp)
     return calc_se_quad(rdisp, γ², u′), γ²
 end
 
-export get_static_energy_quad
+get_static_energy_quad(a₂, rdisp, β::Nothing) = get_static_energy_quad(a₂, rdisp)
+function get_static_energy_quad(a₂, rdisp, β::AbstractFloat)
+	u = get_u₀_quad(rdisp, 1.0)
+	u′ = u*(1+a₂)
+	γ² = find_zero(x -> (u′ - get_u₀_quad(rdisp, x, β)), (1e-40, 1e40))
+	return calc_se_quad(rdisp, γ², u′, β), γ²
+end
+
+function get_u₀_quad0(rdisp, β)
+    α, P, μₐ, Λ = rdisp.α, rdisp.P, abs(rdisp.μ), rdisp.Λ
+	temp_func(x, μₐ, β) = 0.5*(tanh(0.5β*(μₐ + abs(x))) + tanh(0.5β*(abs(x) - μₐ)))
+	f(x) = θₕ(abs(x) - μₐ)*wfunc_gauss((x-P)/Λ)*temp_func(x, μₐ, β)/(abs(x)*4α*π^2)
+    return quadgk_custom(f, P-Λ, P, P+Λ; rtol = 1e-6)[1]
+end
+function get_cutoff_β(a₂, rdisp)
+	u = get_u₀_quad(rdisp, 1.0)
+	u′ = u*(1+a₂)
+	β = find_zero(x -> (u′ - get_u₀_quad0(rdisp, x)), (1e-20, 1000.0))
+	return β
+end
+export get_static_energy_quad, get_cutoff_β
