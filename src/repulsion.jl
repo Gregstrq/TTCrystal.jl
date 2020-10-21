@@ -112,6 +112,17 @@ function compute_repulsion!(grep::FullRepulsionFFT, bs::AbstractVector)
     fs .= fs.*c
     return 0.5*dot(fs, b0), fs
 end
+function compute_repulsion(grep::FullRepulsionFFT, bs::AbstractVector)
+    N, W, c = grep.N, grep.W, grep.c
+    fs = grep.fs
+    b0 = view(bs, 1:N)
+    mul!(grep.ys, grep.rp, b0)
+    grep.ys .*= grep.ker_dft
+    mul!(fs, grep.irp, grep.ys)
+    #fs .= (fs .- ts.*(W*av)).*2uω₀²*Δτ^2
+    fs .= fs.*c
+    return 0.5*dot(fs, b0)
+end
 
 struct FullRepulsion <: AbstractRepulsion
     fs::Vector{Float64}

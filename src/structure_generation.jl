@@ -124,7 +124,6 @@ end
 
 process_bs(bs, params::AbstractParamsNoB1) = (bs,)
 process_bs(bs, params::AbstractParamsB1) = (view(bs, 1:params.N), view(bs,(params.N+1):2params.N))
-process_bs(bs, params::AbstractParamsB1B3) = (view(bs, 1:params.N), view(bs, (params.N+1):2params.N), view(bs, (2params.N+1):3params.N))
 
 function custom_eigen(U::SMatrix{2,2, Complex{T}}) where {T<:Real}
 	eigvals, eigvecs = eigen(Matrix(U))
@@ -309,26 +308,6 @@ function finalize(ΔF, bs, params::AbstractParamsB1)
 	return Δτ*(u*sum(x->(abs2(x)-1), bs[1:N]) + u₁*sum(abs2, bs[(N+1):2N])) - ΔF
 end
 
-function finalize!(∂F, ΔF, bs, params::AbstractParamsB1B3)
-	N, Δτ, u, u₁, u₃ = params.N, params.Δτ, params.u, params.u₁, params.u₃
-    ΔF = Δτ*(u*sum(x->(abs2(x)-1), view(bs, 1:N)) + u₁*sum(abs2, view(bs, (N+1):2N)) + u₃*sum(abs2, view(bs, (2N+1):3N))) - ΔF
-	∂F .*= -1.0
-	for i = 1:N
-		∂F[i] += 2Δτ*u*bs[i]
-	end
-	for i = (N+1):2N
-		∂F[i] += 2Δτ*u₁*bs[i]
-	end
-    for i = (2N+1):3N
-		∂F[i] += 2Δτ*u₃*bs[i]
-	end
-    return ΔF, pin_bs!(∂F, params)
-end
-
-function finalize(ΔF, bs, params::AbstractParamsB1B3)
-	N, Δτ, u, u₁, u₃ = params.N, params.Δτ, params.u, params.u₁, params.u₃
-    return Δτ*(u*sum(x->(abs2(x)-1), view(bs, 1:N)) + u₃*sum(abs2, view(bs, (2N+1):3N)) + u₁*sum(abs2, view(bs, (N+1):2N))) - ΔF
-end
 
 
 function finalize!(∂F, ΔF, bs, params::AbstractParamsNoB1)

@@ -13,14 +13,10 @@ import Base: ==, <, >, <=, >=
 
 include("parameters.jl")
 include("repulsion.jl")
-#include("supplementary_functions.jl")
-#include("initial_conditions.jl")
 include("matrices.jl")
 include("structure_generation.jl")
 include("obj_functions.jl")
 include("optimizers.jl")
-include("ctime_gfuncs.jl")
-#include("interface.jl")
 
 export ParamsB1, ParamsB1_pinned, ParamsNoB1, ParamsNoB1_pinned, ReducedDispersion, Dispersion, Saver
 export get_u₀, get_psamples, widen

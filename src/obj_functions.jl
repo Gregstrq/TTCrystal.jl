@@ -40,7 +40,7 @@ function (fg!::bfgsObjFunc_repul)(F,G, bs)
 		end
 	else
 		if !(F==nothing)
-			return precompute_step(bs, fg!.params, fg!.psamples)
+            return precompute_step(bs, fg!.params, fg!.psamples) + compute_repulsion(fg!.grep, bs)
 		end
 	end
 end

@@ -80,7 +80,6 @@ B′₀(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[b*Δτ -im128; +im128 b*Δ�
 
 B′ₑ(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[(εₚ⁻*Δτ-one128) 0.0; 0.0 (εₚ⁻*Δτ+one128)]*sinch_sqrt(κₚ²Δτ²)*Δτ + M(εₚ⁻, b, b₁)*lSinch_sqrt(κₚ²Δτ²)*εₚ⁻*Δτ^3
 
-B′₃(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[(one128-εₚ⁻*Δτ) 0.0; 0.0 -(εₚ⁻*Δτ+one128)]*sinch_sqrt(κₚ²Δτ²)*Δτ - M(εₚ⁻, b, b₁)*lSinch_sqrt(κₚ²Δτ²)*εₚ⁻*Δτ^3
 
 B′₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[-b₁*Δτ im128; im128 -b₁*Δτ]*sinch_sqrt(κₚ²Δτ²)*Δτ - M(εₚ⁻, b, b₁)*lSinch_sqrt(κₚ²Δτ²)*b₁*Δτ^3
 
@@ -90,7 +89,7 @@ B′′₁₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = -one(SMatrix{2,2, Comple
 
 B′′₀₁(εₚ⁻, b, b₁, κₚ²Δτ², Δτ) = SA[-b*b₁*Δτ im128*(b+b₁); im128*(b+b₁) -b*b₁*Δτ]*lSinch_sqrt(κₚ²Δτ²)*Δτ^3 - M(εₚ⁻, b, b₁)*llSinch_sqrt(κₚ²Δτ²)*b*b₁*Δτ^5
 
-for B_func in (:B, :B⁻¹, :B′₀, :B′₁, :B′ₑ, :B′₃, :B′′₀₀, :B′′₀₁, :B′′₁₁)
+for B_func in (:B, :B⁻¹, :B′₀, :B′₁, :B′ₑ, :B′′₀₀, :B′′₀₁, :B′′₁₁)
     @eval begin
         function $B_func(bs::NTuple{2, AbstractVector{TB}}, i::Int, εₚ⁻, Δτ) where {TB<:Real}
 			b = bs[1][i]

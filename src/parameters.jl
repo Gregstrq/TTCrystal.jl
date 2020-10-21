@@ -1,7 +1,6 @@
 abstract type AbstractParams{T<:Union{Int64,Nothing}} end
 abstract type AbstractParamsB1{T<:Union{Int64,Nothing}} <: AbstractParams{T} end
 abstract type AbstractParamsNoB1{T<:Union{Int64,Nothing}} <: AbstractParams{T} end
-abstract type AbstractParamsB1B3{T<:Union{Int64,Nothing}} <: AbstractParamsB1{T} end
 
 abstract type AbstractDispersion end
 abstract type AbstractSharedCash end
@@ -14,28 +13,6 @@ struct ParamsB1{T<:Union{Int64, Nothing}} <: AbstractParamsB1{T}
     u₁::Float64
     Δτ::Float64
 	ParamsB1(N, m::T, W, u, u₁) where T<:Union{Int64, Nothing} = new{T}(N, m, W, u, u₁, W/N)
-end
-
-struct ParamsB1B3{T<:Union{Int64, Nothing}} <: AbstractParamsB1B3{T}
-    N::Int64
-    m::T
-    W::Float64
-    u::Float64
-    u₁::Float64
-	u₃::Float64
-    Δτ::Float64
-	ParamsB1B3(N, m::T, W, u, u₁, u₃) where T<:Union{Int64, Nothing} = new{T}(N, m, W, u, u₁, u₃, W/N)
-end
-
-struct ParamsB3{T<:Union{Int64, Nothing}} <: AbstractParamsB1B3{T}
-    N::Int64
-    m::T
-    W::Float64
-    u::Float64
-	u₁::Float64
-	u₃::Float64
-    Δτ::Float64
-	ParamsB3(N, m::T, W, u, u₁, u₃) where {T<:Union{Int64, Nothing}} = new{T}(N, m, W, u, u₁, u₃, W/N)
 end
 
 struct ParamsB1_pinned{T<:Union{Int64, Nothing}} <: AbstractParamsB1{T}
@@ -108,8 +85,7 @@ get_u₀(W, m::Nothing, psamples_raw) = get_u₀(psamples_raw)
 
 for Params_constr in (:ParamsB1, :ParamsB1_pinned, :ParamsB1_pinned²)
 	@eval begin
-		function $Params_constr(N::Int64, m::Union{Int64, Nothing}, k::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}})
-            W = 4*K(k^2)
+		function $Params_constr(N::Int64, m::Union{Int64, Nothing}, W::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}})
 			u₀ = get_u₀(W, nothing, psamples_raw)
 			u₁ = u₀*a
 			return $Params_constr(N + 1 - rem(N, 2), m, W, u₀, u₁)
@@ -117,22 +93,9 @@ for Params_constr in (:ParamsB1, :ParamsB1_pinned, :ParamsB1_pinned²)
 	end
 end
 
-for Params_constr in (:ParamsB1B3, :ParamsB3)
-	@eval begin
-		function $Params_constr(N::Int64, m::Union{Int64, Nothing}, k::Float64, a::Float64, psamples_raw::Vector{NTuple{3, Float64}}, a₃ = 1.0)
-            W = 4*K(k^2)
-			u₀ = get_u₀(W, nothing, psamples_raw)
-			u₁ = u₀*a
-			u₃ = u₀*a₃
-			return $Params_constr(N + 1 - rem(N, 2), m, W, u₀, u₁, u₃)
-		end
-	end
-end
-
 for Params_constr in (:ParamsNoB1, :ParamsNoB1_pinned)
 	@eval begin
-		function $Params_constr(N::Int64, m::Union{Int64, Nothing}, k::Float64, psamples_raw::Vector{NTuple{3, Float64}})
-            W = 4*K(k^2)
+		function $Params_constr(N::Int64, m::Union{Int64, Nothing}, W::Float64, psamples_raw::Vector{NTuple{3, Float64}})
 			u₀ = get_u₀(W, nothing, psamples_raw)
 			return $Params_constr(N + 1 - rem(N, 2), m, W, u₀)
 		end
@@ -141,25 +104,50 @@ end
 
 ########
 
+kw(W) = find_zero(k -> (W-4K(k^2)), (0.0, 1.0))
+
 get_length(params::AbstractParamsB1) = 2params.N
-get_length(params::Union{ParamsB3, ParamsB1B3}) = 3params.N
 get_length(params::AbstractParamsNoB1) = params.N
 
 get_τs(params::AbstractParams) = collect(0:params.N-1)*params.Δτ
 
-get_bs(τs, k) = k*Jacobi.sn.(τs, k^2)
+bs_init_func(τs, k::AbstractFloat) = k*Jacobi.sn.(τs, k^2)
+bs_init_func(τs, k::Nothing) = tanh.(τs)
+function get_bs(params::AbstractParams)
+    W = params.W
+    if W < 40.0
+        return get_bs(params, kw(W))
+    end
+    τs = get_τs(params)
+    try
+        k = kw(W)
+        return _fill_bs(τs, W,  k)
+    catch e
+        return _fill_bs(τs, W,  nothing)
+    end
+end
 function get_bs(params::AbstractParams, k)
     bs = zeros(get_length(params))
-    bs[1:params.N] .= get_bs(get_τs(params), k)
+    bs[1:params.N] .= bs_init_func(get_τs(params), k)
     pin_bs!(bs, params)
+    return bs
+end
+function _fill_bs(τs, W, k)
+    N = length(τs)
+    @assert N>10
+    Nhalf = div(N, 2) + 1
+    Nquarter = div(Nhalf, 2) + 1
+    bs = similar(τs)
+    bs[1:Nquarter] = bs_init_func(τs[1:Nquarter], k)
+    bs[Nquarter+1:Nhalf] .= bs_init_func(W/2 .- τs[Nquarter+1:Nhalf], k)
+    bs[end:-1:Nhalf+1] .= -bs[2:N-Nhalf+1]
     return bs
 end
 
 ########
 
-get_pinned_idxs(params::Union{ParamsNoB1, ParamsB1, ParamsB1B3}) = Int64[]
+get_pinned_idxs(params::Union{ParamsNoB1, ParamsB1}) = Int64[]
 get_pinned_idxs(params::Union{ParamsB1_pinned, ParamsNoB1_pinned}) = [1, params.i_pinned]
-get_pinned_idxs(params::ParamsB3) = (N = params.N; collect((N+1):2N))
 function get_pinned_idxs(params::Union{ParamsB1_pinned²})
     N, i_pinned = params.N, params.i_pinned
     return [1, i_pinned, N+div(N,4)+1, N+div(N,4)+i_pinned]
@@ -176,15 +164,9 @@ function pin_bs!(bs::AbstractVector{T}, pinned_idxs::Vector{Int64}) where {T}
     return bs
 end
 
-function pin_bs!(bs::AbstractVector, params::AbstractParamsB1B3)
-    N = params.N
-    bs[[1, div(N,2)+1]] .= 0.0
-    #bs[(2N+1):3N] .-= sum(view(bs, (2N+1):3N))/N
-    return bs
-end
 
 @inline project_onto(a, params::AbstractParams) = project_onto(a, get_free_idxs(params))
-@inline project_onto(a, params::Union{ParamsB1, ParamsB1B3, ParamsNoB1}) = a
+@inline project_onto(a, params::Union{ParamsB1, ParamsNoB1}) = a
 @inline project_onto(a::AbstractVector, free_idxs::Vector{Int64}) = view(a, free_idxs)
 @inline project_onto(a::AbstractMatrix, free_idxs::Vector{Int64}) = view(a, free_idxs)
 
