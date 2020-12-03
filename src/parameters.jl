@@ -451,20 +451,23 @@ function calc_se_quad(rdisp, γ², u, β)
     α, P, μₐ, Λ = rdisp.α, rdisp.P, abs(rdisp.μ), rdisp.Λ
 	energy_func(x, μₐ, γ², β′) = Float64(log((cosh(β′*μₐ) + cosh(β′*x))/(cosh(β′*μₐ) + cosh(β′*sqrt(x^2 + γ²))))/β′)
     f(x) = wfunc_gauss((x-P)/Λ)*energy_func(x, μₐ, γ², β′)/(2α*π^2)
-    return quadgk(f, P-Λ, P, P+Λ)[1] + u*γ²
+    return quadgk(f, P-Λ, 0.0, P, P+Λ)[1] + u*γ²
 end
-function get_static_energy_quad(a₂, rdisp)
+function get_static_energy_quad(a₂, rdisp, interval::NTuple{2,Float64} = (1e-30, 1e30))
     u = get_u₀_quad(rdisp, 1.0)
     u′ = u*(1+a₂)
-    γ² = find_zero(x -> (u′ - get_u₀_quad(rdisp, x)), (1e-30, 1e30))
+    #print(u, "\n",u′, "\n")
+    f(x) = (u′ - get_u₀_quad(rdisp, x))
+    #print(f(interval[1]),"\n", f(interval[2]), "\n\n")
+    γ² = find_zero(f, interval)
     return calc_se_quad(rdisp, γ², u′), γ²
 end
 
-get_static_energy_quad(a₂, rdisp, β::Nothing) = get_static_energy_quad(a₂, rdisp)
-function get_static_energy_quad(a₂, rdisp, β::AbstractFloat)
+get_static_energy_quad(a₂, rdisp, β::Nothing, interval::NTuple{2,Float64} = (1e-30,1e30)) = get_static_energy_quad(a₂, rdisp, interval)
+function get_static_energy_quad(a₂, rdisp, β::AbstractFloat, interval::NTuple{2,Float64} = (1e-40,1e40))
 	u = get_u₀_quad(rdisp, 1.0)
 	u′ = u*(1+a₂)
-	γ² = find_zero(x -> (u′ - get_u₀_quad(rdisp, x, β)), (1e-40, 1e40))
+	γ² = find_zero(x -> (u′ - get_u₀_quad(rdisp, x, β)), interval)
 	return calc_se_quad(rdisp, γ², u′, β), γ²
 end
 

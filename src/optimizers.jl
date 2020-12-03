@@ -57,7 +57,7 @@ function get_optimum(W::Float64, m::Union{Int64, Nothing}, N::Int64, a::Float64,
 	bs_seed = Optim.minimizer(results0)
     #bs_seed′ = zeros(get_length(params))
     #bs_seed′[1:params.N] .= bs_seed
-	#t′ += time()
+	t′ += time()
 	@info "Free energy of without b1 is $f_seed. Calculation took $t′ s.\n\n"
 	####
 	#t′ = -time()
@@ -78,14 +78,31 @@ function km_walkthrough_repul(W_range::AbstractVector, m_range::AbstractVector, 
     for i in eachindex(tups)
         t1 = time()
         W, m, reptyp = tups[i]
-		@info "I am currently dealing with $i-th tuple of (k, m, reptyp), which is (k, m, reptyp) = ($W, $(trm(m)), $reptyp).\n\n"
+		@info "I am currently dealing with $i-th tuple of (W, m, reptyp), which is (W, m, reptyp) = ($W, $(trm(m)), $reptyp).\n\n"
 		f_nm, f_seed, bs_seed, τs = get_optimum(W, m, N, a, reptyp, rdisp, opt, int_rtol, limits)
 		jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
 			@stash!(file, W, m, N, a, reptyp, rdisp, opt, int_rtol, limits, f_nm, f_seed, bs_seed, τs)
 		end
 		saver_o.iter += 1
         t2 = time()
-		@info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (k, m, reptyp) = ($W, $(trm(m)), $reptyp). This run took $(t2-t1) s.\n\n\n\n"
+		@info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (W, m, reptyp) = ($W, $(trm(m)), $reptyp). This run took $(t2-t1) s.\n\n\n\n"
+    end
+end
+function km_walkthrough_repul′(W_range::AbstractVector, m_range::AbstractVector, N::Int64, a::Float64, reptyp_range::IRange{T}, rdisp::ReducedDispersion, saver_o::Saver, opt::Optim.Options, int_rtol::Float64 = 1e-7, limits::Int64 = 200, i₀::Int64 = 1) where {T<:AbstractRepulsionType}
+	tups = vec([tup for tup in product(W_range, m_range, reptyp_range)])[1:i₀-1]
+    N_tot = length(tups)
+    t0 = time()
+    for i in eachindex(tups)
+        t1 = time()
+        W, m, reptyp = tups[i]
+		@info "I am currently dealing with $i-th tuple of (W, m, reptyp), which is (W, m, reptyp) = ($W, $(trm(m)), $reptyp).\n\n"
+		f_nm, f_seed, bs_seed, τs = get_optimum(W, m, N, a, reptyp, rdisp, opt, int_rtol, limits)
+		jldopen("$(saver_o.dirname)/dset_$(saver_o.iter).jld2", "w") do file
+			@stash!(file, W, m, N, a, reptyp, rdisp, opt, int_rtol, limits, f_nm, f_seed, bs_seed, τs)
+		end
+		saver_o.iter += 1
+        t2 = time()
+		@info "I am $(t2-t0) s into the computation.\n Finished $i-th run out of $(N_tot) for (W, m, reptyp) = ($W, $(trm(m)), $reptyp). This run took $(t2-t1) s.\n\n\n\n"
     end
 end
 
@@ -93,7 +110,7 @@ end
 trm(m) = m
 trm(::Nothing) = "Inf"
 
-export km_walkthrough_repul
+export km_walkthrough_repul, km_walkthrough_repul′
 
 extract_number(str::AbstractString) = parse(Int, match(r"\d+", str).match)
 function get_files_in_dir(dir::AbstractString = pwd())
