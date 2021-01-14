@@ -102,8 +102,15 @@ for B_func in (:B, :B⁻¹, :B′₀, :B′₁, :B′ₑ, :B′′₀₀, :B′�
             return $B_func(εₚ⁻, b, zero(TB), (εₚ⁻^2+b^2)*Δτ^2, Δτ)
         end
 
+        function $B_func(bs::AbstractVector{TB}, i::Int, εₚ⁻, Δτ) where {TB<:Real}
+            b = bs[i]
+            return $B_func(εₚ⁻, b, zero(TB), (εₚ⁻^2+b^2)*Δτ^2, Δτ)
+        end
+
         $(Symbol(B_func,:r))(bs::Tuple{AbstractVector{TB}, Vararg{AbstractVector{TB}}}, i::Int, εₚ⁻, Δτ, γ::Real) where {TB<:Real} = $B_func(bs, i, εₚ⁻, Δτ)*exp(-sqrt(εₚ⁻^2 + γ^2)*Δτ)
+        $(Symbol(B_func,:r))(bs::AbstractVector{TB}, i::Int, εₚ⁻, Δτ, γ::Real) where {TB<:Real} = $B_func(bs, i, εₚ⁻, Δτ)*exp(-sqrt(εₚ⁻^2 + γ^2)*Δτ)
         @inline $(Symbol(B_func,:r))(bs::Tuple{AbstractVector{TB}, Vararg{AbstractVector{TB}}}, i::Int, εₚ⁻, Δτ) where {TB<:Real} = $(Symbol(B_func, :r))(bs, i, εₚ⁻, Δτ, one(TB))
+        @inline $(Symbol(B_func,:r))(bs::AbstractVector{TB}, i::Int, εₚ⁻, Δτ) where {TB<:Real} = $(Symbol(B_func, :r))(bs, i, εₚ⁻, Δτ, one(TB))
 		export $B_func, $(Symbol(B_func, :r))
     end
 end

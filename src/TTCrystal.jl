@@ -1,6 +1,6 @@
 module TTCrystal
 
-using FileIO, Distributed, DistributedArrays, LinearAlgebra, SharedArrays, StaticArrays, Printf, OffsetArrays, Elliptic, Roots, NLSolversBase, Optim, Plots, Quadmath, GenericSchur, QuadGK, JLD2, FFTW
+using FileIO, Distributed, DistributedArrays, LinearAlgebra, SharedArrays, StaticArrays, Printf, OffsetArrays, Elliptic, Roots, NLSolversBase, Optim, Plots, Quadmath, GenericSchur, QuadGK, JLD2, FFTW, RecursiveArrayTools
 
 using CustomQuad
 
@@ -17,6 +17,7 @@ include("matrices.jl")
 include("structure_generation.jl")
 include("obj_functions.jl")
 include("optimizers.jl")
+include("analytic_continuation.jl")
 
 export ParamsB1, ParamsB1_pinned, ParamsNoB1, ParamsNoB1_pinned, ReducedDispersion, Dispersion, Saver
 export get_u₀, get_psamples, widen

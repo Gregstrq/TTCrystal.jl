@@ -20,6 +20,16 @@ function compute_U_cash!(U_cash, bs::T, εₚ⁻, Δτ) where T<:Tuple{AbstractV
 	end
 end
 
+function compute_U_cash!(U_cash, bs::AbstractVector{Float64}, εₚ⁻, Δτ)
+	N = length(bs)
+	M = one(SMatrix{2,2, Complex{Float128}})
+	U_cash[N+1] = M
+	for i′ = N:-1:1
+		M = M*Br(bs, i′, εₚ⁻, Δτ)
+		U_cash[i′] = M
+	end
+end
+
 ############################
 
 function compute_single_period!(∂U::AbstractVector{SMatrix{2,2, Complex{Float128}}}, ∂²U::AbstractMatrix{SMatrix{2,2, Complex{Float128}}}, U_cash::AbstractVector{SMatrix{2,2, Complex{Float128}}}, bs::NTuple{2, AbstractVector{Float64}}, εₚ⁻, Δτ)
