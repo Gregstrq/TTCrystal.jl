@@ -122,17 +122,20 @@ end
 
 #################################
 
-K₀(τ, ω₀, W) = (exp(-ω₀*abs(τ)) + exp(ω₀*(abs(τ) - W)))/(1 - exp(-ω₀*W))
-K₀′(τ, ω₀, W) = -sign(τ)*(exp(-ω₀*abs(τ)) - exp(ω₀*(abs(τ) - W)))/(1 - exp(-ω₀*W))
+K₀(τ, ω₀, W) = 0.5(exp(-ω₀*abs(τ)) + exp(ω₀*(abs(τ) - W)))/(1 - exp(-ω₀*W))/ω₀
+K₀′(τ, ω₀, W) = -0.5sign(τ)*(exp(-ω₀*abs(τ)) - exp(ω₀*(abs(τ) - W)))/(1 - exp(-ω₀*W))
 
 function initial_state(i::Int, bs, Sps, psamples_raw, τs, Δτ, W, ω₀, u₀⁻¹, a₂)
     εₚ⁻s = [psample[2] for psample in psamples_raw]
     wₚs = [psample[3]*0.5 for psample in psamples_raw]
     Sp₀ = [elt[2] for elt in Sps*wₚs]
     Sp = Sps[i,:]
-    Kc = dot(K₀.(τs[i].-τs, ω₀, W), Sp₀)*0.5ω₀^2*Δτ*u₀⁻¹*a₂/(1+a₂)
-    Ks = dot(K₀′.(τs[i].-τs, ω₀, W), Sp₀)*0.5ω₀^2*Δτ*u₀⁻¹*a₂/(1+a₂)*im
-    return sTimeRHS(Kc, Ks, ω₀, u₀⁻¹, εₚ⁻s, wₚs), ArrayPartition([bs[i]+0.0im], Sp)
+    ω̃₀ = ω₀/sqrt(1+a₂)
+    #####
+    b₀ = bs[i] + 0im
+    K̃′ = dot(K₀′.(τs[i].-τs, ω̃₀, W), bs)*Δτ
+    b₀′ = 2sum(wₚs.*εₚ⁻s.*getindex.(Sp, 1))*u₀⁻¹ - im*a₂*ω̃₀^2*K̃′
+    return sTimeRHS(ω₀^2, u₀⁻¹, u₀⁻¹/(1+a₂)*ω₀^2, εₚ⁻s, wₚs), ArrayPartition([b₀, b₀′], Sp)
 end
 
 function initial_state(i::Int, bs, Sps, psamples_raw, τs, Δτ, W, u₀⁻¹)
@@ -166,14 +169,14 @@ function initial_state2(bs::AbstractVector, Sps, psamples_raw, τs, Δτ, W, ω�
 end
 
 struct sTimeRHS
-    Kc::Float64
-    Ks::Complex{Float64}
-    ω₀::Float64
+    ω₀²::Float64
     u₀⁻¹::Float64
+    ũ₀⁻¹::Float64
     εₚ⁻s::Vector{Float64}
     wₚs::Vector{Float64}
-    b_cache::Vector{Complex{Float64}}
-    sTimeRHS(Kc, Ks, ω₀, u₀⁻¹, εₚ⁻s, wₚs) = new(Kc, Ks, ω₀, u₀⁻¹, εₚ⁻s, wₚs, Vector{Complex{Float64}}(undef, Threads.nthreads()))
+    b_cache1::Vector{Complex{Float64}}
+    b_cache2::Vector{Complex{Float64}}
+    sTimeRHS(ω₀², u₀⁻¹, ũ₀⁻¹, εₚ⁻s, wₚs) = new(ω₀², u₀⁻¹, ũ₀⁻¹, εₚ⁻s, wₚs, zeros(Complex{Float64}, Threads.nthreads()), zeros(Complex{Float64}, Threads.nthreads()))
 end
 
 struct fTimeRHS
@@ -212,17 +215,28 @@ mutable struct sTimeRHS_simple
 end
 
 function (rhs::sTimeRHS)(du::T, u::T, p, t) where {T<:ArrayPartition{Complex{Float64},Tuple{Array{Complex{Float64},1},Array{SArray{Tuple{3},Complex{Float64},1,3},1}}}}
-    b = u[1]
+    b = u.x[1]
     Sp = u.x[2]
+    db = du.x[1]
     dSp = du.x[2]
-    b_cache = rhs.b_cache
-    fill!(b_cache, 0.0)
+    b_cache1 = rhs.b_cache1
+    b_cache2 = rhs.b_cache2
+    wₚs = rhs.wₚs
+    εₚ⁻s = rhs.εₚ⁻s
+    ω₀² = rhs.ω₀²
+    u₀⁻¹ = rhs.u₀⁻¹
+    ũ₀⁻¹ = rhs.ũ₀⁻¹
+    ##################
+    fill!(b_cache1, 0.0)
+    fill!(b_cache2, 0.0)
     Threads.@threads for i = eachindex(Sp)
-        Bₚ = SVector{3,Complex{Float64}}(0.0, -b, rhs.εₚ⁻s[i])
+        Bₚ = SVector{3,Complex{Float64}}(0.0, -b[1], rhs.εₚ⁻s[i])
         dSp[i] = 2*cross_product(Bₚ, Sp[i])
-        b_cache[Threads.threadid()] += rhs.wₚs[i]*dSp[i][2]
+        b_cache1[Threads.threadid()] -= 4wₚs[i]*εₚ⁻s[i]*(b[1]*Sp[i][3] + εₚ⁻s[i]*Sp[i][1])
+        b_cache2[Threads.threadid()] += wₚs[i]*Sp[i][2]
     end
-    du[1] = rhs.u₀⁻¹*sum(b_cache) + rhs.Kc*sin(rhs.ω₀*t) - rhs.Ks*cos(rhs.ω₀*t)
+    db[1] = b[2]
+    db[2] = u₀⁻¹*sum(b_cache1) + ũ₀⁻¹*sum(b_cache2) - ω₀²*b[1]
 end
 
 function (rhs::fTimeRHS)(du::T, u::T, p, t) where {T<:ArrayPartition}
