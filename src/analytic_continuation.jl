@@ -51,8 +51,8 @@ function calculate_initial_conditions!(s_cash::S_Cash, bs, params::ParamsNoB1, p
     @sync begin
         for wid in true_workers()
             @spawnat wid chunk_initial_conditions!(localpart(Uxs), localpart(Uys), localpart(Uzs), localpart(U_cashes), Sps[wid], bs, params, localpart(psamples))
-            @spawnat 1 chunk_initial_conditions!(localpart(Uxs), localpart(Uys), localpart(Uzs), localpart(U_cashes), Sps[1], bs, params, localpart(psamples))
         end
+        @spawnat 1 chunk_initial_conditions!(localpart(Uxs), localpart(Uys), localpart(Uzs), localpart(U_cashes), Sps[1], bs, params, localpart(psamples))
     end
     return hcat([Sps[i] for i in eachindex(Sps)]...)
 end
@@ -129,13 +129,14 @@ function initial_state(i::Int, bs, Sps, psamples_raw, τs, Δτ, W, ω₀, u₀�
     εₚ⁻s = [psample[2] for psample in psamples_raw]
     wₚs = [psample[3]*0.5 for psample in psamples_raw]
     Sp₀ = [elt[2] for elt in Sps*wₚs]
-    Sp = Sps[i,:]
+    Spi = Sps[i,:]
+    Sp = [getindex.(Spi, 1), getindex.(Spi, 2), getindex.(Spi, 3)]
     ω̃₀ = ω₀/sqrt(1+a₂)
     #####
     b₀ = bs[i] + 0im
     K̃′ = dot(K₀′.(τs[i].-τs, ω̃₀, W), bs)*Δτ
-    b₀′ = 2sum(wₚs.*εₚ⁻s.*getindex.(Sp, 1))*u₀⁻¹ - im*a₂*ω̃₀^2*K̃′
-    return sTimeRHS(ω₀^2, u₀⁻¹, u₀⁻¹/(1+a₂)*ω₀^2, εₚ⁻s, wₚs), ArrayPartition([b₀, b₀′], Sp)
+    b₀′ = 2sum(wₚs.*εₚ⁻s.*Sp[1])*u₀⁻¹ - im*a₂*ω̃₀^2*K̃′
+    return sTimeRHS(ω₀^2, u₀⁻¹, u₀⁻¹/(1+a₂)*ω₀^2, εₚ⁻s, wₚs), ArrayPartition([b₀, b₀′], Sp...)
 end
 
 function initial_state(i::Int, bs, Sps, psamples_raw, τs, Δτ, W, u₀⁻¹)
@@ -143,8 +144,18 @@ function initial_state(i::Int, bs, Sps, psamples_raw, τs, Δτ, W, u₀⁻¹)
     wₚs = [psample[3]*0.5 for psample in psamples_raw]
     Sp₀ = Sps*wₚs
     Sp = Sps[i,:]
-    print(bs[i] - u₀⁻¹*Sp₀[i][2], "\n")
+    #print(bs[i] - u₀⁻¹*Sp₀[i][2], "\n")
     return sTimeRHS_simple(u₀⁻¹, εₚ⁻s, wₚs), ArrayPartition([bs[i]+0.0im], Sp)
+end
+
+function initial_state′(i::Int, bs, Sps, psamples_raw, τs, Δτ, W, u₀⁻¹)
+    εₚ⁻s = [psample[2] for psample in psamples_raw]
+    wₚs = [psample[3]*0.5 for psample in psamples_raw]
+    Sp₀ = Sps*wₚs
+    Spi = Sps[i,:]
+    Sp = [getindex.(Spi, 1), getindex.(Spi, 2), getindex.(Spi, 3)]
+    print(bs[i] - u₀⁻¹*Sp₀[i][2], "\n")
+    return sTimeRHS_simple′(u₀⁻¹, εₚ⁻s, wₚs), ArrayPartition([bs[i]+0.0im], Sp...)
 end
 
 function initial_state(bs::AbstractVector, Sps, psamples_raw, τs, Δτ, W, ω₀, u₀⁻¹, a₂)
@@ -214,11 +225,23 @@ mutable struct sTimeRHS_simple
     sTimeRHS_simple(u₀⁻¹, εₚ⁻s, wₚs) = new(u₀⁻¹, εₚ⁻s, wₚs, Vector{Complex{Float64}}(undef, Threads.nthreads()))
 end
 
-function (rhs::sTimeRHS)(du::T, u::T, p, t) where {T<:ArrayPartition{Complex{Float64},Tuple{Array{Complex{Float64},1},Array{SArray{Tuple{3},Complex{Float64},1,3},1}}}}
+struct sTimeRHS_simple′
+    u₀⁻¹::Float64
+    εₚ⁻s::Vector{Float64}
+    wₚs::Vector{Float64}
+    b_cache::Vector{Complex{Float64}}
+    sTimeRHS_simple′(u₀⁻¹, εₚ⁻s, wₚs) = new(u₀⁻¹, εₚ⁻s, wₚs, Vector{Complex{Float64}}(undef, Threads.nthreads()))
+end
+
+function (rhs::sTimeRHS)(du::T, u::T, p, t) where {T <: ArrayPartition} 
     b = u.x[1]
-    Sp = u.x[2]
+    Sp_x = u.x[2]
+    Sp_y = u.x[3]
+    Sp_z = u.x[4]
     db = du.x[1]
-    dSp = du.x[2]
+    dSp_x = du.x[2]
+    dSp_y = du.x[3]
+    dSp_z = du.x[4]
     b_cache1 = rhs.b_cache1
     b_cache2 = rhs.b_cache2
     wₚs = rhs.wₚs
@@ -229,11 +252,12 @@ function (rhs::sTimeRHS)(du::T, u::T, p, t) where {T<:ArrayPartition{Complex{Flo
     ##################
     fill!(b_cache1, 0.0)
     fill!(b_cache2, 0.0)
-    Threads.@threads for i = eachindex(Sp)
-        Bₚ = SVector{3,Complex{Float64}}(0.0, -b[1], rhs.εₚ⁻s[i])
-        dSp[i] = 2*cross_product(Bₚ, Sp[i])
-        b_cache1[Threads.threadid()] -= 4wₚs[i]*εₚ⁻s[i]*(b[1]*Sp[i][3] + εₚ⁻s[i]*Sp[i][1])
-        b_cache2[Threads.threadid()] += wₚs[i]*Sp[i][2]
+    Threads.@threads for i = eachindex(Sp_x)
+        dSp_x[i] = -2(b[1]*Sp_z[i] + εₚ⁻s[i]*Sp_y[i])
+        dSp_y[i] = 2εₚ⁻s[i]*Sp_x[i]
+        dSp_z[i] = 2b[1]*Sp_x[i]
+        b_cache1[Threads.threadid()] -= 4wₚs[i]*εₚ⁻s[i]*(b[1]*Sp_z[i] + εₚ⁻s[i]*Sp_y[i])
+        b_cache2[Threads.threadid()] += wₚs[i]*Sp_y[i]
     end
     db[1] = b[2]
     db[2] = u₀⁻¹*sum(b_cache1) + ũ₀⁻¹*sum(b_cache2) - ω₀²*b[1]
@@ -297,6 +321,26 @@ function (rhs::sTimeRHS_simple)(du::T, u::T, p, t) where {T<:ArrayPartition{Comp
     du[1] = rhs.u₀⁻¹*sum(b_cache)
 end
 
+function (rhs::sTimeRHS_simple′)(du::T, u::T, p, t) where {T<:ArrayPartition}
+    b = u[1]
+    Sp_x = u.x[2]
+    Sp_y = u.x[3]
+    Sp_z = u.x[4]
+    dSp_x = du.x[2]
+    dSp_y = du.x[3]
+    dSp_z = du.x[4]
+    b_cache = rhs.b_cache
+    fill!(b_cache, 0.0)
+    Threads.@threads for i = eachindex(Sp_x)
+    #for i = 1:length(Sp)
+        dSp_x[i] = -2(b[1]*Sp_z[i] + rhs.εₚ⁻s[i]*Sp_y[i])
+        dSp_y[i] = 2rhs.εₚ⁻s[i]*Sp_x[i]
+        dSp_z[i] = 2b[1]*Sp_x[i]
+        b_cache[Threads.threadid()] += rhs.wₚs[i]*dSp_y[i]
+    end
+    du[1] = rhs.u₀⁻¹*sum(b_cache)
+end
+
 function cross_product(v1::T, v2::T) where {T<:SVector{3, Complex{Float64}}}
     return SVector{3,Complex{Float64}}(v1[2]*v2[3] - v1[3]*v2[2], v1[3]*v2[1] - v1[1]*v2[3], v1[1]*v2[2] - v1[2]*v2[1])
 end
@@ -320,3 +364,61 @@ function construct_FFT_operator(N, Δτ, W, ω₀, u₀⁻¹, a₂)
     ker_dft .= full_kernel_dft.(collect(0:N-1), ω₀*W, N)*0.5ω₀*Δτ*u₀⁻¹*a₂/(1+a₂)
     return RealFFTOperator(ker_dft)
 end
+
+
+function retarded_integral!(sin_integral, cos_integral, bₜs, ts, Δt, ω̃₀)
+    sin_integral[1] = 0
+    cos_integral[1] = 0
+    st = sin(ω̃₀*Δt)
+    ct = cos(ω̃₀*Δt)
+    Δtₕ = Δt/2
+    for i = 2:length(sin_integral)
+        sin_integral[i] = sin_integral[i-1]*ct + cos_integral[i-1]*st + st*bₜs[i-1]*Δtₕ
+        cos_integral[i] = cos_integral[i-1]*ct - sin_integral[i-1]*st + (bₜs[i] + ct*bₜs[i-1])*Δtₕ
+    end
+    return sin_integral
+end
+function retarded_integral(bₜs, ts, Δt, ω̃₀)
+    sin_integral = similar(bₜs)
+    cos_integral = similar(bₜs)
+    return retarded_integral!(sin_integral, cos_integral, bₜs, ts, Δt, ω̃₀)
+end
+
+function ie_rhs!(b′ₜs, Sp, sin_integral, cos_integral, b_cache, bₜs, ts, εₚ⁻s, wₚs, K, K′, Δt, ω̃₀, u₀⁻¹, a₂)
+    Sp = deepcopy(Sp)
+    retarded_integral!(sin_integral, cos_integral, bₜs, ts, Δt, ω̃₀)
+    a′ = a₂*ω̃₀
+    a′′ = a₂*ω̃₀^2
+    b′ₜs[1] = sum(wₚs.*getindex.(Sp, 2))*u₀⁻¹
+    for i = 2:length(b′ₜs)
+        fill!(b_cache, 0)
+        Threads.@threads for j = eachindex(Sp)
+            Bₚ = SVector{3,Complex{Float64}}(0.0, -bₜs[i-1], εₚ⁻s[j])
+            Sp[j] = Sp[j] + 2Δt*cross_product(Bₚ, Sp[j])
+            b_cache[Threads.threadid()] += wₚs[j]*Sp[j][2]
+        end
+        b′ₜs[i] = sum(b_cache)*u₀⁻¹
+    end
+    b′ₜs .-= (sin_integral .+ (K′*im).*sin.(ω̃₀.*ts)).*a′ .+ cos.(ω̃₀.*ts).*(a′′*K)
+    return b′ₜs, bₜs
+end
+
+function setup_ie_params(sol, i::Int, bs, Sps, psamples_raw, τs, Δτ, W, ω₀, u₀⁻¹, a₂)
+    ts = sol.t
+    bₜs = map(first, sol.u)
+    Δt = ts[end]/(length(ts)-1)
+    εₚ⁻s = [psample[2] for psample in psamples_raw]
+    wₚs = [psample[3]*0.5 for psample in psamples_raw]
+    Sp = Sps[i, :]
+    ω̃₀ = ω₀/sqrt(1+a₂)
+    K = dot(K₀.(τs[i].-τs, ω̃₀, W), bs)*Δτ
+    K′ = dot(K₀′.(τs[i].-τs, ω̃₀, W), bs)*Δτ
+    sin_integral = similar(bₜs)
+    cos_integral = similar(bₜs)
+    b′ₜs = similar(bₜs)
+    b_cache = similar(bₜs, Threads.nthreads())
+    return b′ₜs, Sp, sin_integral, cos_integral, b_cache, bₜs, ts, εₚ⁻s, wₚs, K, K′, Δt, ω̃₀, u₀⁻¹, a₂
+end
+
+export retarded_integral!, retarded_integral, ie_rhs!, setup_ie_params
+
