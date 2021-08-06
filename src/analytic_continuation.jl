@@ -252,7 +252,7 @@ function (rhs::sTimeRHS)(du::T, u::T, p, t) where {T <: ArrayPartition}
     ##################
     fill!(b_cache1, 0.0)
     fill!(b_cache2, 0.0)
-    Threads.@threads for i = eachindex(Sp_x)
+    @tturbo for i = eachindex(Sp_x)
         dSp_x[i] = -2(b[1]*Sp_z[i] + εₚ⁻s[i]*Sp_y[i])
         dSp_y[i] = 2εₚ⁻s[i]*Sp_x[i]
         dSp_z[i] = 2b[1]*Sp_x[i]

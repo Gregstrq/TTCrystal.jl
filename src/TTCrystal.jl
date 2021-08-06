@@ -1,6 +1,7 @@
 module TTCrystal
 
 using FileIO, Distributed, DistributedArrays, LinearAlgebra, SharedArrays, StaticArrays, Printf, OffsetArrays, Elliptic, Roots, NLSolversBase, Optim, Plots, Quadmath, GenericSchur, QuadGK, JLD2, FFTW, RecursiveArrayTools
+using LoopVectorization
 
 using CustomQuad
 

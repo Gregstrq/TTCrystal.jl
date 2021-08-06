@@ -37,13 +37,18 @@ struct ParamsB1_pinned²{T<:Union{Int64, Nothing}} <: AbstractParamsB1{T}
 	ParamsB1_pinned²(N::Int64, m::T, W::Float64, u::Float64, u₁::Float64) where T<:Union{Int64, Nothing} = new{T}(N, m, W, u, u₁, W/N, div(N,2)+1)
 end
 
-struct ParamsNoB1{T<:Union{Int64, Nothing}} <: AbstractParamsNoB1{T}
+mutable struct ParamsNoB1{T<:Union{Int64, Nothing}} <: AbstractParamsNoB1{T}
     N::Int64
     m::T
     W::Float64
     u::Float64
     Δτ::Float64
 	ParamsNoB1(N::Int64, m::T, W::Float64, u::Float64) where T<:Union{Int64, Nothing} = new{T}(N, m, W, u, W/N)
+end
+
+function set_period!(params::ParamsNoB1, W)
+	params.W = W
+	params.Δτ = W/params.N
 end
 
 struct ParamsNoB1_pinned{T<:Union{Int64, Nothing}} <: AbstractParamsNoB1{T}
@@ -97,7 +102,8 @@ for Params_constr in (:ParamsNoB1, :ParamsNoB1_pinned)
 	@eval begin
 		function $Params_constr(N::Int64, m::Union{Int64, Nothing}, W::Float64, psamples_raw::Vector{NTuple{3, Float64}})
 			u₀ = get_u₀(W, nothing, psamples_raw)
-			return $Params_constr(N + 1 - rem(N, 2), m, W, u₀)
+			return $Params_constr(N, m, W, u₀)
+			#return $Params_constr(N + 1 - rem(N, 2), m, W, u₀)
 		end
 	end
 end
@@ -109,7 +115,7 @@ kw(W) = find_zero(k -> (W-4K(k^2)), (0.0, 1.0))
 get_length(params::AbstractParamsB1) = 2params.N
 get_length(params::AbstractParamsNoB1) = params.N
 
-get_τs(params::AbstractParams) = collect(0:params.N-1)*params.Δτ
+get_τs(params::AbstractParams) = collect(0.5:params.N-0.5)*params.Δτ
 
 bs_init_func(τs, k::AbstractFloat) = k*Jacobi.sn.(τs, k^2)
 bs_init_func(τs, k::Nothing) = tanh.(τs)
